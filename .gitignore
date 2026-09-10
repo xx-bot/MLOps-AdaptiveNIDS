@@ -6,6 +6,8 @@
 
 # Large Datasets
 data/
+!data/raw/.gitkeep
+!data/processed/.gitkeep
 
 # other files
 *.pdf
