@@ -5,7 +5,10 @@
 .ipynb_checkpoints/
 
 # Large Datasets
-dataset/
+data/
+
+# other files
+*.pdf
 
 # OS metadata
 .DS_Store# Byte-compiled / optimized / DLL files
