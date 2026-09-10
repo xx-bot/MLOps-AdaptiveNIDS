@@ -5,7 +5,7 @@
 .ipynb_checkpoints/
 
 # Large Datasets
-data/
+data/raw/*
 !data/raw/.gitkeep
 !data/processed/.gitkeep
 
