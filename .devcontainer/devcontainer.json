@@ -1,0 +1,20 @@
+{
+      "name": "MLOps Python Dev Environment",
+      "image": "mcr.microsoft.com/devcontainers/python:3.11",
+      "customizations": {
+        "vscode": {
+          "settings": {
+            "python.defaultInterpreterPath": "/usr/local/bin/python"
+          },
+          "extensions": [
+            "ms-python.python",
+            "ms-python.vscode-pylance",
+            "ms-toolsai.jupyter",
+            "ms-toolsai.vscode-jupyter-cell-tags",
+            "ms-toolsai.jupyter-keymap",
+            "ms-toolsai.jupyter-renderers"
+          ]
+        }
+      },
+      "postCreateCommand": "pip install --upgrade pip && pip install -r requirements.txt"
+    }
