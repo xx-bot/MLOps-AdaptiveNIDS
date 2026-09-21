@@ -4,6 +4,9 @@
 # Python cache
 .ipynb_checkpoints/
 
+# Zeek Cache
+zeek_logs/run_*/
+
 # Large Datasets
 data/raw/*
 !data/raw/.gitkeep
