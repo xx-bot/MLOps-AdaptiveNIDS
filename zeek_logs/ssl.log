@@ -1,0 +1,41 @@
+#separator \x09
+#set_separator	,
+#empty_field	(empty)
+#unset_field	-
+#path	ssl
+#open	2026-09-21-11-04-27
+#fields	ts	uid	id.orig_h	id.orig_p	id.resp_h	id.resp_p	version	cipher	curve	server_name	resumed	last_alert	next_protocol	established	ssl_history	cert_chain_fps	client_cert_chain_fps	sni_matches_cert
+#types	time	string	addr	port	addr	port	string	string	string	string	bool	string	string	bool	string	vector[string]	vector[string]	bool
+1789963467.269078	CkP7pb3cII1qcbaVx	10.34.210.138	35800	146.75.45.91	443	TLSv13	TLS_AES_128_GCM_SHA256	X25519MLKEM768	ads.mozilla.org	T	-	-	T	CIsi	-	-	-
+1789963472.796291	CayQhF1dUWW6hO6bEe	10.34.210.138	48030	64.233.170.139	443	TLSv13	TLS_AES_128_GCM_SHA256	X25519MLKEM768	apis.google.com	T	-	-	T	CIsi	-	-	-
+1789963472.818533	CROrLv4uQ7XSdxPrv6	10.34.210.138	60888	142.250.4.113	443	TLSv13	TLS_AES_128_GCM_SHA256	X25519MLKEM768	apis.google.com	T	-	-	T	CIsi	-	-	-
+1789963473.090346	CrILSM2fq96QGeYTWg	10.34.210.138	35266	142.251.10.95	443	TLSv13	TLS_AES_256_GCM_SHA384	X25519MLKEM768	appsgrowthpromo-pa.clients6.google.com	T	-	-	T	CIsi	-	-	-
+1789963473.181599	CeP0RZ1Ka9eDlLoif3	10.34.210.138	45980	172.253.118.95	443	TLSv13	TLS_AES_256_GCM_SHA384	X25519MLKEM768	waa-pa.clients6.google.com	T	-	-	T	CIsi	-	-	-
+1789963473.434118	CXAxEK1KqolsFSW4Zj	10.34.210.138	42166	142.251.155.119	443	TLSv13	TLS_AES_128_GCM_SHA256	X25519MLKEM768	www.google.com	T	-	-	T	CIsi	-	-	-
+1789963473.520753	Ce4Eu94Uv59yT2kERc	10.34.210.138	58700	74.125.24.84	443	TLSv13	TLS_AES_128_GCM_SHA256	X25519MLKEM768	accounts.google.com	T	-	-	T	CIsi	-	-	-
+1789963485.165810	CP2w3D8Vyr6JM4rub	10.34.210.138	41370	64.233.170.95	443	TLSv13	TLS_AES_256_GCM_SHA384	X25519MLKEM768	appsgenaiserver-pa.clients6.google.com	T	-	-	T	CIsi	-	-	-
+1789963485.166869	CcEjHa2hoLuPpx6BFi	10.34.210.138	41356	64.233.170.95	443	TLSv13	TLS_AES_256_GCM_SHA384	X25519MLKEM768	appsgenaiserver-pa.clients6.google.com	T	-	-	T	CIsi	-	-	-
+1789963485.164714	Cwlqln2e0cQIQTj3v	10.34.210.138	41386	64.233.170.95	443	TLSv13	TLS_AES_256_GCM_SHA384	X25519MLKEM768	appsgenaiserver-pa.clients6.google.com	T	-	-	T	CIsi	-	-	-
+1789963484.979936	Cl01Gn3c3WmIGTWiy4	10.34.210.138	56620	172.253.118.95	443	-	-	-	appsgenaiserver-pa.clients6.google.com	F	-	-	F	C	-	-	-
+1789963484.655472	C66VT3zgld4pUsUDg	10.34.210.138	54574	74.125.200.95	443	-	-	-	addons-pa.clients6.google.com	F	-	-	F	C	-	-	-
+1789963483.956563	CfuH2L3lONzDZGBcJj	10.34.210.138	48139	142.251.10.95	443	-	-	-	espresso-pa.clients6.google.com	F	-	-	F	C	-	-	-
+1789963483.169093	CaYBj6183RcNas7C4	10.34.210.138	51427	64.233.170.95	443	-	-	-	peoplestack-pa.clients6.google.com	F	-	-	F	C	-	-	-
+1789963481.546634	CJO0jD2MrbpmEh9MJj	10.34.210.138	49485	74.125.24.138	443	-	-	-	ogs.google.com	F	-	-	F	C	-	-	-
+1789963475.660722	CucEs26Q786FDgVkj	10.34.210.138	55692	57.144.187.32	443	-	-	-	static.whatsapp.net	F	-	-	F	C	-	-	-
+1789963475.276302	CgnaxQ3j9BWEobldGi	10.34.210.138	51429	172.217.70.101	443	TLSv13	TLS_AES_128_GCM_SHA256	X25519MLKEM768	lh3.google.com	T	-	-	F	Cs	-	-	-
+1789963472.748252	CxSz3p3x4OD82t8M9d	10.34.210.138	43025	74.125.68.94	443	-	-	-	ssl.gstatic.com	F	-	-	F	C	-	-	-
+1789963472.738959	CKqKXN19bBZihCtUi4	10.34.210.138	53560	64.233.170.94	443	-	-	-	www.gstatic.com	F	-	-	F	C	-	-	-
+1789963472.919730	CEsfC44m2NRyUxhgb7	10.34.210.138	57648	142.251.12.95	443	-	-	-	drivefrontend-pa.clients6.google.com	F	-	-	F	C	-	-	-
+1789963473.396015	CePXX04PGqRXKMGkj4	10.34.210.138	33459	142.250.4.84	443	-	-	-	accounts.google.com	F	-	-	F	C	-	-	-
+1789963484.174096	CmNl3Y3HqPGt0rNq8l	10.34.210.138	36667	172.217.194.139	443	-	-	-	contacts.google.com	F	-	-	F	C	-	-	-
+1789963473.041431	CMAcEu4Rgs6l8gUxMl	10.34.210.138	44448	74.125.24.95	443	TLSv13	TLS_AES_256_GCM_SHA384	X25519MLKEM768	waa-pa.clients6.google.com	T	-	-	F	Cs	-	-	-
+1789963475.553799	C5wSF13jhZQA3Hpzd	10.34.210.138	46263	142.250.4.132	443	-	-	-	lh3.googleusercontent.com	F	-	-	F	C	-	-	-
+1789963472.849254	CsTvrR2Fzm53nz2eDl	10.34.210.138	42885	142.251.10.101	443	-	-	-	clients6.google.com	F	-	-	F	C	-	-	-
+1789963472.749040	Cj3DGY3Gns2FpZAeM4	10.34.210.138	47071	74.125.200.95	443	TLSv13	TLS_AES_256_GCM_SHA384	X25519MLKEM768	drivefrontend-pa.clients6.google.com	T	-	-	F	Cs	-	-	-
+1789963472.803799	Cfpe4u15TmZ9h5eGE1	10.34.210.138	49713	142.251.10.101	443	-	-	-	clients6.google.com	F	-	-	F	C	-	-	-
+1789963473.049648	CEiQo41EdGarzgndX	10.34.210.138	40616	142.251.12.95	443	-	-	-	drivefrontend-pa.clients6.google.com	F	-	-	F	C	-	-	-
+1789963473.224891	CRLlbd4v30A4KsfN2f	10.34.210.138	58219	34.128.10.49	443	-	-	-	csp.withgoogle.com	F	-	-	F	C	-	-	-
+1789963482.064487	CN0XQc1VVLmby6gFDa	10.34.210.138	56662	172.217.70.95	443	-	-	-	peoplestack-pa.clients6.google.com	F	-	-	F	C	-	-	-
+1789963473.112454	CBevbq1mz3h3zWuI44	10.34.210.138	40620	142.251.12.95	443	-	-	-	drivefrontend-pa.clients6.google.com	F	-	-	F	C	-	-	-
+1789963473.056597	Cd9LLF2YkJweUHIIt6	10.34.210.138	47834	172.253.118.95	443	TLSv13	TLS_AES_256_GCM_SHA384	X25519MLKEM768	waa-pa.clients6.google.com	T	-	-	F	Cs	-	-	-
+#close	2026-09-21-11-04-45
