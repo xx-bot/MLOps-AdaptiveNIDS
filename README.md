@@ -12,31 +12,32 @@ Traditional machine learning and deep learning-based Network Intrusion Detection
 
 ### 💡 Proposed Solution
 This project develops an **Adaptive AI-driven NIDS** integrated with an end-to-end **MLOps Continual Retraining Pipeline**:
-- **Real-Time Data Capture**: In deployment, network traffic is captured at the session/application layer using **Zeek**.
-- **Continual Retraining Simulation**: During development, the **UNSW-NB15** dataset is partitioned into sequential batches to simulate incoming data streams over time.
-- **Automated Drift & Trigger Mechanism**: The system monitors data distribution shifts and performance metrics daily. When threshold triggers or scheduled weekly intervals are reached, the system automatically triggers model retraining and redeploys the updated model.
+- **Real-Time Data Capture**: Captures live network traffic at the session/application layer using **Zeek** (`src/capture_zeek.py`).
+- **Continual Retraining Simulation**: Partitioning the **UNSW-NB15** benchmark dataset into sequential batches to simulate incoming data streams over time.
+- **Automated Drift & Trigger Mechanism**: Monitors data distribution shifts and performance metrics. Retraining is triggered automatically upon reaching threshold drift levels or scheduled intervals.
 
 ---
 
 ## 📊 Dataset: UNSW-NB15
 
 The model is trained and evaluated on the **UNSW-NB15** dataset, created by IXIA PerfectStorm at the Cyber Range Lab of the Australian Centre for Cyber Security (ACCS):
-- **Total Records**: 2,540,044 network flow instances.
-- **Features**: 49 attributes (packet-level, flow-level, and connection-level statistics).
+- **Total Records**: 2,540,044 network flow instances across 4 CSV files.
+- **Features**: 49 raw attributes (packet-level, flow-level, and connection-level statistics).
+- **Preprocessed Schema**: 28 features mapped to Zeek `conn.log` equivalents.
 - **Attack Categories**: Contains 9 modern attack families (*Fuzzers, Analysis, Backdoors, DoS, Exploits, Generic, Reconnaissance, Shellcode, Worms*).
-- **Classification Objective**: Binary classification (`Normal` vs. `Attack`), prioritizing the identification of malicious network activity.
+- **Classification Objective**: Binary classification (`Normal` vs. `Attack`), prioritizing high recall for attack detection.
 
 ---
 
 ## 🏗️ System Architecture & Pipelines
 
-The system is structured around two interconnected pipelines:
+The system links real-time traffic monitoring via Zeek with an offline/continual retraining loop:
 
 ```mermaid
 flowchart TD
     subgraph INFERENCE ["1. Inference Pipeline (Real-Time / Daily)"]
-        A["Network Traffic"] --> B["Zeek Network Monitor"]
-        B --> C["Feature Engineering & Preprocessing"]
+        A["Network Traffic"] --> B["Zeek Network Monitor<br/>(src/capture_zeek.py)"]
+        B --> C["Feature Engineering & Mapping<br/>(conn.log -> 28 UNSW Features)"]
         C --> D["Active Model Inference"]
         D --> E["Predicted Labels & Daily Batches"]
     end
@@ -69,107 +70,106 @@ flowchart TD
 
 ---
 
+## 📡 Live Traffic Capture with Zeek
+
+The [`src/capture_zeek.py`](src/capture_zeek.py) script handles real-time packet capturing and generates session logs in `zeek_logs/`.
+
+### Commands & Usage
+
+1. **List Available Network Interfaces**:
+   ```bash
+   python3 src/capture_zeek.py --list-interfaces
+   ```
+
+2. **Capture Live Traffic (IPv4 Only)**:
+   ```bash
+   sudo python3 src/capture_zeek.py -i wlo1 -d 60 --ipv4-only
+   ```
+
+3. **Capture Traffic with Custom BPF Filter**:
+   ```bash
+   sudo python3 src/capture_zeek.py -i wlo1 -d 60 -f "ip"
+   ```
+
+> Output logs are saved in sequentially numbered directories under `zeek_logs/run_1/`, `zeek_logs/run_2/`, etc., with automatic ownership adjustment to non-root users.
+
+---
+
+## 🔄 Feature Mapping & Preprocessing
+
+Zeek `conn.log` streams are mapped to UNSW-NB15 features using the rules defined in [`zeek_unsw_mapping.json`](zeek_unsw_mapping.json) and documented in [`zeek_unsw_feature_mapping.md`](zeek_unsw_feature_mapping.md):
+
+- **Direct Mappings**: `id.orig_h` $\rightarrow$ `srcip`, `id.orig_p` $\rightarrow$ `sport`, `id.resp_h` $\rightarrow$ `dstip`, `id.resp_p` $\rightarrow$ `dsport`, `duration` $\rightarrow$ `dur`, `orig_bytes` $\rightarrow$ `sbytes`, `resp_bytes` $\rightarrow$ `dbytes`, etc.
+- **Derived Features**: `Sload`, `Dload`, `smeansz`, `dmeansz`, `Ltime`, and `is_sm_ips_ports`.
+- **Rolling Window Aggregations (`ct_*`)**: Computes 8 contextual features over a 100-connection rolling window (`ct_srv_src`, `ct_dst_ltm`, `ct_src_dport_ltm`, etc.).
+- **Hex Port Parsing**: Handles raw hexadecimal port representations (`0x000b`, `0xcc09`, etc.) found in raw datasets (`parse_port`).
+
+For full preprocessing documentation and diagram, see [`preprocessing_summary.txt`](preprocessing_summary.txt) and [`pipeline_architecture.md`](pipeline_architecture.md).
+
+---
+
 ## 🚀 Setup & Installation Guide
 
-You can run this project either on **GitHub Codespaces (cloud)** or **locally on your machine**.
+### Prerequisites
+- **Python 3.11+**
+- **Zeek Network Security Monitor** (for live traffic capture)
+- **Git**
 
 ---
 
-### Option A: GitHub Codespaces (Recommended)
+### Option A: Local Setup (Windows / macOS / Linux)
 
-GitHub Codespaces provides a pre-configured, containerized Linux environment with Python 3.11, Jupyter, and all extensions pre-installed.
+1. **Clone the Repository**:
+   ```bash
+   git clone https://github.com/xx-bot/MLOps-AdaptiveNIDS.git
+   cd MLOps-AdaptiveNIDS
+   ```
 
-1. **Launch Codespace**:
-   - Go to the repository on GitHub: [`xx-bot/MLOps-AdaptiveNIDS`](https://github.com/xx-bot/MLOps-AdaptiveNIDS).
-   - Click the green **`<> Code`** button, select the **`Codespaces`** tab, and click **`Create codespace on main`**.
-   - *(Recommended machine size)*: Click the three dots `...` > **New with options** and select a machine with at least **4 cores / 16 GB RAM** to handle loading large CSV datasets into memory.
+2. **Create and Activate Virtual Environment**:
+   ```bash
+   python3 -m venv .venv
+   source .venv/bin/activate
+   ```
 
-2. **Automatic Environment Build**:
-   - Codespaces reads [`.devcontainer/devcontainer.json`](.devcontainer/devcontainer.json).
-   - It will automatically install Python 3.11, the VS Code Python & Jupyter extensions, and run `pip install -r requirements.txt`.
+3. **Install Dependencies**:
+   ```bash
+   pip install --upgrade pip
+   pip install -r requirements.txt
+   ```
 
-3. **Updating / Rebuilding an Existing Codespace**:
-   - If your Codespace is already open, pull latest changes and rebuild:
-     ```bash
-     git pull
-     ```
-   - Press `Ctrl + Shift + P` (or `Cmd + Shift + P` on macOS), type **`Codespaces: Rebuild Container`**, and press Enter.
-
-4. **Running Notebooks**:
-   - Open [`notebook/notebook.ipynb`](notebook/notebook.ipynb).
-   - In the top-right kernel picker, choose **Python 3.11 (Python Environments / Dev Container)**.
+4. **Launch Jupyter Environment**:
+   ```bash
+   jupyter lab
+   ```
 
 ---
 
-### Option B: Local Setup (Windows / macOS / Linux)
+### Option B: GitHub Codespaces
 
-#### Prerequisites
-- **Python 3.11+** installed
-- **Git** installed
-
-#### 1. Clone the Repository
-```bash
-git clone https://github.com/xx-bot/MLOps-AdaptiveNIDS.git
-cd MLOps-AdaptiveNIDS
-```
-
-#### 2. Create and Activate a Virtual Environment
-
-- **Using standard `venv`**:
-  - **Windows (PowerShell)**:
-    ```powershell
-    python -m venv .venv
-    .\.venv\Scripts\Activate.ps1
-    ```
-  - **macOS / Linux**:
-    ```bash
-    python3 -m venv .venv
-    source .venv/bin/activate
-    ```
-
-- **Using `uv` (Faster)**:
-  ```bash
-  uv venv --python 3.11
-  # Windows
-  .\.venv\Scripts\activate
-  # Linux/macOS
-  source .venv/bin/activate
-  ```
-
-#### 3. Install Dependencies
-```bash
-pip install --upgrade pip
-pip install -r requirements.txt
-```
-
-#### 4. Launch Jupyter Notebook / Lab
-```bash
-jupyter lab
-# or
-jupyter notebook
-```
-
+1. Navigate to [`xx-bot/MLOps-AdaptiveNIDS`](https://github.com/xx-bot/MLOps-AdaptiveNIDS).
+2. Click **`<> Code`** > **`Codespaces`** > **`Create codespace on main`**.
+3. Select a machine with at least **4 cores / 16 GB RAM** for processing raw CSV datasets.
 
 ---
 
 ## 💾 Dataset Management
 
-Because the full **UNSW-NB15** CSV files exceed 100 MB each (e.g., `UNSW-NB15_1.csv` ~168 MB), large dataset files are excluded from Git version control via [`.gitignore`](.gitignore) to respect GitHub's upload limits.
+The raw **UNSW-NB15** CSV files exceed GitHub's single-file size limits and are excluded from Git via [`.gitignore`](.gitignore).
 
-### Placing the Dataset Files
-Download the dataset from [Kaggle: UNSW-NB15](https://www.kaggle.com/datasets/mrwellsdavid/unsw-nb15) and place the CSV files inside the `dataset/raw/` directory:
+Place raw dataset files inside the `data/raw/` directory:
 
 ```text
-dataset/
-└── raw/
-    ├── NUSW-NB15_features.csv
-    ├── UNSW-NB15_1.csv
-    ├── UNSW-NB15_2.csv
-    ├── UNSW-NB15_3.csv
-    ├── UNSW-NB15_4.csv
-    ├── UNSW-NB15_LIST_EVENTS.csv
-    ├── UNSW_NB15_testing-set.csv
-    └── UNSW_NB15_training-set.csv
+data/
+├── raw/
+│   ├── NUSW-NB15_features.csv
+│   ├── UNSW-NB15_1.csv
+│   ├── UNSW-NB15_2.csv
+│   ├── UNSW-NB15_3.csv
+│   ├── UNSW-NB15_4.csv
+│   ├── UNSW-NB15_LIST_EVENTS.csv
+│   ├── UNSW_NB15_testing-set.csv
+│   └── UNSW_NB15_training-set.csv
+└── processed/
 ```
 
 ---
@@ -179,20 +179,30 @@ dataset/
 ```text
 MLOps-AdaptiveNIDS/
 ├── .devcontainer/
-│   └── devcontainer.json        # Codespaces container configuration
-├── dataset/
-│   └── raw/                     # Raw UNSW-NB15 CSV files (gitignored)
+│   └── devcontainer.json             # Codespaces container configuration
+├── data/
+│   ├── raw/                          # Raw UNSW-NB15 CSV files (gitignored)
+│   └── processed/                    # Processed dataset storage
+├── models/                           # Trained model artifacts & checkpoints
 ├── notebook/
-│   └── notebook.ipynb           # EDA, preprocessing & model development
-├── .gitignore                   # Excludes virtual environments and large datasets
-├── requirements.txt             # Python dependencies
-├── LICENSE                      # Project license
-└── README.md                    # Project documentation & setup guides
+│   └── notebook.ipynb                # EDA, preprocessing & feature engineering
+├── src/
+│   └── capture_zeek.py               # Real-time traffic capture script using Zeek
+├── zeek_logs/                        # Captured Zeek session logs (run_1, run_2...)
+├── zeek_unsw_mapping.json            # JSON schema mapping Zeek conn.log to UNSW-NB15
+├── zeek_unsw_feature_mapping.md      # Detailed Zeek to UNSW feature mapping guide
+├── preprocessing_summary.txt         # Preprocessing steps summary
+├── pipeline_architecture.md          # Preprocessing pipeline diagram (Mermaid)
+├── .gitignore                        # Excludes virtual environments and raw dataset
+├── requirements.txt                  # Python dependencies
+├── LICENSE                           # Project license
+└── README.md                         # Project documentation
 ```
 
 ---
 
 ## 👥 Contributors & Acknowledgements
+
 - **Author**: Alexander Angelo ([@xx-bot](https://github.com/xx-bot))
 - **Course**: MLOps (Semester 5)
 - **Supervisor**: Rizal Setya Perdana, S.Kom., M.Kom., Ph.D.
