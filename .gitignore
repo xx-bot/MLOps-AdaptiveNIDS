@@ -8,11 +8,16 @@
 zeek_logs/run_*/
 
 # Large Datasets
-data/
-data/raw/*
-!data/raw/.gitkeep
+data/processed/*.csv
+data/processed/*.json
+data/processed/simulation_stream/
+data/processed/versions/
 !data/processed/.gitkeep
+
+data/raw/*.csv
+!data/raw/.gitkeep
 !data/raw/sample_data/
+!data/raw/sample_data/**
 
 # other files
 *.pdf
