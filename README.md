@@ -12,8 +12,8 @@ Traditional machine learning and deep learning-based Network Intrusion Detection
 
 ### 💡 Proposed Solution
 This project develops an **Adaptive AI-driven NIDS** integrated with an end-to-end **MLOps Continual Retraining Pipeline**:
-- **Real-Time Data Capture**: Captures live network traffic at the session/application layer using **Zeek** (`src/capture_zeek.py`).
-- **Continual Retraining Simulation**: Partitioning the **UNSW-NB15** benchmark dataset into sequential batches to simulate incoming data streams over time.
+- **Real-Time Data Capture**: Captures live network traffic at the session/application layer using **Zeek** ([`src/production/capture.py`](file:///home/alex/Documents/mlops/MLOps-AdaptiveNIDS/src/production/capture.py)).
+- **Continual Retraining Simulation**: Partitioning the **UNSW-NB15** benchmark dataset into sequential batches to simulate incoming data streams over time ([`src/simulation/simulate_stream.py`](file:///home/alex/Documents/mlops/MLOps-AdaptiveNIDS/src/simulation/simulate_stream.py)).
 - **Automated Drift & Trigger Mechanism**: Monitors data distribution shifts and performance metrics. Retraining is triggered automatically upon reaching threshold drift levels or scheduled intervals.
 
 ---
@@ -36,7 +36,7 @@ The system links real-time traffic monitoring via Zeek with an offline/continual
 ```mermaid
 flowchart TD
     subgraph INFERENCE ["1. Inference Pipeline (Real-Time / Daily)"]
-        A["Network Traffic"] --> B["Zeek Network Monitor<br/>(src/capture_zeek.py)"]
+        A["Network Traffic"] --> B["Zeek Network Monitor<br/>(src/production/capture.py)"]
         B --> C["Feature Engineering & Mapping<br/>(conn.log -> 28 UNSW Features)"]
         C --> D["Active Model Inference"]
         D --> E["Predicted Labels & Daily Batches"]
@@ -70,41 +70,33 @@ flowchart TD
 
 ---
 
-## 📡 Live Traffic Capture with Zeek
+## 📡 Live Traffic Capture & Production Pipeline
 
-The [`src/capture_zeek.py`](src/capture_zeek.py) script handles real-time packet capturing and generates session logs in `zeek_logs/`.
+The production pipeline in [`src/production/`](file:///home/alex/Documents/mlops/MLOps-AdaptiveNIDS/src/production/) manages live packet capture, raw log ingestion, preprocessing, and dataset versioning.
 
-### Commands & Usage
+### 1. List Available Network Interfaces
+```bash
+python3 src/production/capture.py -l
+```
 
-1. **List Available Network Interfaces**:
-   ```bash
-   python3 src/capture_zeek.py --list-interfaces
-   ```
+### 2. Capture Live Network Packets with Zeek
+```bash
+# Capture live traffic on interface wlo1 for 60 seconds (requires root/sudo)
+sudo python3 src/production/capture.py -i wlo1 -d 60
+```
+> Output logs are saved in sequentially numbered directories under `zeek_logs/run_1/`, `zeek_logs/run_2/`, etc.
 
-2. **Capture Live Traffic (IPv4 Only)**:
-   ```bash
-   sudo python3 src/capture_zeek.py -i wlo1 -d 60 --ipv4-only
-   ```
+### 3. Ingest Raw Zeek Logs (`data/raw/zeek/`)
+```bash
+python3 src/production/ingest_data.py --zeek-log zeek_logs/run_1/conn.log --no-preprocess
+```
 
-3. **Capture Traffic with Custom BPF Filter**:
-   ```bash
-   sudo python3 src/capture_zeek.py -i wlo1 -d 60 -f "ip"
-   ```
+### 4. Preprocess Features & Register Version (`data/processed/`)
+```bash
+python3 src/production/preprocess_data.py --raw-file data/raw/zeek/raw_zeek_run_1_conn.csv
+```
 
-> Output logs are saved in sequentially numbered directories under `zeek_logs/run_1/`, `zeek_logs/run_2/`, etc., with automatic ownership adjustment to non-root users.
-
----
-
-## 🔄 Feature Mapping & Preprocessing
-
-Zeek `conn.log` streams are mapped to UNSW-NB15 features using the rules defined in [`zeek_unsw_mapping.json`](zeek_unsw_mapping.json) and documented in [`zeek_unsw_feature_mapping.md`](zeek_unsw_feature_mapping.md):
-
-- **Direct Mappings**: `id.orig_h` $\rightarrow$ `srcip`, `id.orig_p` $\rightarrow$ `sport`, `id.resp_h` $\rightarrow$ `dstip`, `id.resp_p` $\rightarrow$ `dsport`, `duration` $\rightarrow$ `dur`, `orig_bytes` $\rightarrow$ `sbytes`, `resp_bytes` $\rightarrow$ `dbytes`, etc.
-- **Derived Features**: `Sload`, `Dload`, `smeansz`, `dmeansz`, `Ltime`, and `is_sm_ips_ports`.
-- **Rolling Window Aggregations (`ct_*`)**: Computes 8 contextual features over a 100-connection rolling window (`ct_srv_src`, `ct_dst_ltm`, `ct_src_dport_ltm`, etc.).
-- **Hex Port Parsing**: Handles raw hexadecimal port representations (`0x000b`, `0xcc09`, etc.) found in raw datasets (`parse_port`).
-
-For full preprocessing documentation and diagram, see [`preprocessing_summary.txt`](preprocessing_summary.txt) and [`pipeline_architecture.md`](pipeline_architecture.md).
+For detailed step-by-step production documentation, see [`src/production/README.md`](file:///home/alex/Documents/mlops/MLOps-AdaptiveNIDS/src/production/README.md).
 
 ---
 
@@ -112,12 +104,53 @@ For full preprocessing documentation and diagram, see [`preprocessing_summary.tx
 
 ### Prerequisites
 - **Python 3.11+**
-- **Zeek Network Security Monitor** (for live traffic capture)
+- **Zeek Network Security Monitor**
 - **Git**
 
 ---
 
-### Option A: Local Setup (Windows / macOS / Linux)
+### 📦 Installing Zeek Network Security Monitor
+
+Zeek is required for live network packet capture and session log generation.
+
+#### 🐧 Ubuntu / Debian
+```bash
+# Option 1: Standard Repository
+sudo apt update
+sudo apt install -y zeek
+
+# Option 2: Official Binary Repository (Recommended for Ubuntu 22.04 LTS)
+echo 'deb http://download.opensuse.org/repositories/security:/zeek/xUbuntu_22.04/ /' | sudo tee /etc/apt/sources.list.d/security:zeek.list
+curl -fsSL https://download.opensuse.org/repositories/security:/zeek/xUbuntu_22.04/Release.key | gpg --dearmor | sudo tee /etc/apt/trusted.gpg.d/security_zeek.gpg > /dev/null
+sudo apt update
+sudo apt install -y zeek
+```
+
+#### 🍎 macOS (Homebrew)
+```bash
+brew install zeek
+```
+
+#### 🎩 Fedora / RHEL / CentOS
+```bash
+sudo dnf install -y zeek
+```
+
+#### 🔒 Granting Non-Root Packet Capture Capabilities
+To allow Zeek to capture raw network traffic without requiring `sudo` on every run:
+```bash
+sudo setcap cap_net_raw,cap_net_admin=eip $(which zeek || echo /opt/zeek/bin/zeek)
+```
+
+#### 🛠️ Verifying Zeek Installation
+```bash
+zeek --version
+```
+*(Example output: `zeek version 6.0.0`)*
+
+---
+
+### 🐍 Python Environment Setup
 
 1. **Clone the Repository**:
    ```bash
@@ -137,14 +170,14 @@ For full preprocessing documentation and diagram, see [`preprocessing_summary.tx
    pip install -r requirements.txt
    ```
 
-4. **Launch Jupyter Environment**:
+4. **Launch Jupyter Lab**:
    ```bash
    jupyter lab
    ```
 
 ---
 
-### Option B: GitHub Codespaces
+## 💻 GitHub Codespaces Setup
 
 1. Navigate to [`xx-bot/MLOps-AdaptiveNIDS`](https://github.com/xx-bot/MLOps-AdaptiveNIDS).
 2. Click **`<> Code`** > **`Codespaces`** > **`Create codespace on main`**.
@@ -154,22 +187,15 @@ For full preprocessing documentation and diagram, see [`preprocessing_summary.tx
 
 ## 💾 Dataset Management
 
-The raw **UNSW-NB15** CSV files exceed GitHub's single-file size limits and are excluded from Git via [`.gitignore`](.gitignore).
-
-Place raw dataset files inside the `data/raw/` directory:
+Place raw **UNSW-NB15** dataset files inside `data/raw/`:
 
 ```text
 data/
 ├── raw/
 │   ├── NUSW-NB15_features.csv
-│   ├── UNSW-NB15_1.csv
-│   ├── UNSW-NB15_2.csv
-│   ├── UNSW-NB15_3.csv
-│   ├── UNSW-NB15_4.csv
-│   ├── UNSW-NB15_LIST_EVENTS.csv
-│   ├── UNSW_NB15_testing-set.csv
-│   └── UNSW_NB15_training-set.csv
-└── processed/
+│   ├── UNSW-NB15_1.csv through 4.csv
+│   └── zeek/                        # Raw ingested Zeek CSV logs
+└── processed/                       # Preprocessed & versioned dataset catalog
 ```
 
 ---
@@ -181,22 +207,31 @@ MLOps-AdaptiveNIDS/
 ├── .devcontainer/
 │   └── devcontainer.json             # Codespaces container configuration
 ├── data/
-│   ├── raw/                          # Raw UNSW-NB15 CSV files (gitignored)
-│   └── processed/                    # Processed dataset storage
+│   ├── raw/                          # Raw UNSW-NB15 dataset & raw Zeek logs (data/raw/zeek)
+│   └── processed/                    # Versioned dataset catalog (v1.0.0, v1.1.0...)
 ├── models/                           # Trained model artifacts & checkpoints
 ├── notebook/
-│   └── notebook.ipynb                # EDA, preprocessing & feature engineering
+│   ├── EDA.ipynb                     # Exploratory Data Analysis
+│   └── preprocessing.ipynb           # Feature engineering & UNSW-NB15 schema mapping
 ├── src/
-│   └── capture_zeek.py               # Real-time traffic capture script using Zeek
+│   ├── production/                   # Production capture, raw ingestion, & preprocessing
+│   │   ├── capture.py                # Live packet capture via Zeek engine
+│   │   ├── ingest_data.py            # Ingests conn.log into data/raw/zeek
+│   │   ├── preprocess_data.py        # Maps schema & registers dataset version
+│   │   └── README.md                 # Production step-by-step documentation
+│   ├── simulation/                   # Historical data streaming & simulation
+│   │   ├── preprocess.py             # Offline UNSW-NB15 dataset cleaner
+│   │   ├── simulate_stream.py        # Stream batch partitioner
+│   │   └── version_manager.py        # Dataset versioning engine
+│   └── README.md                     # CLI scripts overview & detailed reference
 ├── zeek_logs/                        # Captured Zeek session logs (run_1, run_2...)
 ├── zeek_unsw_mapping.json            # JSON schema mapping Zeek conn.log to UNSW-NB15
 ├── zeek_unsw_feature_mapping.md      # Detailed Zeek to UNSW feature mapping guide
 ├── preprocessing_summary.txt         # Preprocessing steps summary
 ├── pipeline_architecture.md          # Preprocessing pipeline diagram (Mermaid)
-├── .gitignore                        # Excludes virtual environments and raw dataset
 ├── requirements.txt                  # Python dependencies
 ├── LICENSE                           # Project license
-└── README.md                         # Project documentation
+└── README.md                         # Main project documentation
 ```
 
 ---
