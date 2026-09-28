@@ -12,9 +12,9 @@ if str(src_dir) not in sys.path:
     sys.path.insert(0, str(src_dir))
 
 try:
-    from production.preprocess_data import preprocess_zeek_dataset
+    from production.preprocess import preprocess_zeek_dataset
 except ImportError:
-    from preprocess_data import preprocess_zeek_dataset
+    from production.preprocess import preprocess_zeek_dataset
 
 logging.basicConfig(
     level=logging.INFO,
