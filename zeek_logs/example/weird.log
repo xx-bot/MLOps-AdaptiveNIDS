@@ -1,0 +1,19 @@
+#separator \x09
+#set_separator	,
+#empty_field	(empty)
+#unset_field	-
+#path	weird
+#open	2026-09-21-11-04-27
+#fields	ts	uid	id.orig_h	id.orig_p	id.resp_h	id.resp_p	name	addl	notice	peer	source
+#types	time	string	addr	port	addr	port	string	string	bool	string	string
+1789963467.445930	CyzX0HKBdTosULNj9	10.34.210.138	47642	140.248.129.91	443	bad_TCP_checksum	-	F	zeek	TCP
+1789963470.211949	C2Pqhx4iO71TGdGxLj	10.34.210.138	38618	142.251.157.2	443	bad_UDP_checksum	-	F	zeek	UDP
+1789963472.853186	CROrLv4uQ7XSdxPrv6	10.34.210.138	60888	142.250.4.113	443	window_recision	-	F	zeek	-
+1789963472.949174	CayQhF1dUWW6hO6bEe	10.34.210.138	48030	64.233.170.139	443	window_recision	-	F	zeek	-
+1789963473.106909	CEiQo41EdGarzgndX	10.34.210.138	40616	142.251.12.95	443	window_recision	-	F	zeek	-
+1789963473.169404	CBevbq1mz3h3zWuI44	10.34.210.138	40620	142.251.12.95	443	window_recision	-	F	zeek	-
+1789963473.500311	CXAxEK1KqolsFSW4Zj	10.34.210.138	42166	142.251.155.119	443	window_recision	-	F	zeek	-
+1789963473.613419	CrILSM2fq96QGeYTWg	10.34.210.138	35266	142.251.10.95	443	window_recision	-	F	zeek	-
+1789963485.197588	CcEjHa2hoLuPpx6BFi	10.34.210.138	41356	64.233.170.95	443	window_recision	-	F	zeek	-
+1789963485.242766	Cwlqln2e0cQIQTj3v	10.34.210.138	41386	64.233.170.95	443	window_recision	-	F	zeek	-
+#close	2026-09-21-11-04-45
