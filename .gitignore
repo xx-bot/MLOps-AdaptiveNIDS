@@ -12,6 +12,7 @@ data/
 data/raw/*
 !data/raw/.gitkeep
 !data/processed/.gitkeep
+!data/raw/sample_data/
 
 # other files
 *.pdf
