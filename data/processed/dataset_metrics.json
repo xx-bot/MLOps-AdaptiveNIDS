@@ -1,0 +1,8 @@
+{
+  "num_records": 1451455,
+  "num_features": 31,
+  "label_distribution": {
+    "0": 1361567,
+    "1": 89888
+  }
+}
