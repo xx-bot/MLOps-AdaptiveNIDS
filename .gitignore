@@ -7,17 +7,9 @@
 # Zeek Cache
 zeek_logs/run_*/
 
-# Large Datasets
-data/processed/*.csv
-data/processed/*.json
-data/processed/simulation_stream/
-data/processed/versions/
-!data/processed/.gitkeep
-
-data/raw/*.csv
-!data/raw/.gitkeep
-!data/raw/sample_data/
-!data/raw/sample_data/**
+# Large datasets are versioned with DVC (see DVC_MIGRATION.md).
+# DVC writes data/raw/.gitignore and data/processed/.gitignore by itself,
+# so these directories must not be ignored from here.
 
 # other files
 *.pdf
