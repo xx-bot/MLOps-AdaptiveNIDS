@@ -2,7 +2,7 @@ import argparse
 import logging
 import sys
 from pathlib import Path
-from typing import Tuple, Union
+from typing import Optional, Tuple, Union
 
 import pandas as pd
 
@@ -11,10 +11,7 @@ src_dir = Path(__file__).resolve().parent.parent
 if str(src_dir) not in sys.path:
     sys.path.insert(0, str(src_dir))
 
-try:
-    from production.preprocess import preprocess_zeek_dataset
-except ImportError:
-    from production.preprocess import preprocess_zeek_dataset
+from production.preprocess_data import preprocess_zeek_dataset
 
 logging.basicConfig(
     level=logging.INFO,
@@ -79,29 +76,25 @@ def ingest_zeek_logs(
     run_preprocess: bool = True,
     default_label: int = 0,
     processed_dir: Union[str, Path] = "data/processed",
-    merge_latest: bool = False,
-    bump_type: str = "minor",
-    desc: str = ""
-) -> Tuple[Path, str]:
+    merge_latest: bool = False
+) -> Tuple[Path, Optional[Path]]:
     log_path = Path(zeek_log_path)
 
     # Ingest data from captured zeek logs
     logger.info("=== Phase 1: Raw Data Ingestion ===")
     df_raw, raw_file_path = ingest_raw_zeek_log(log_path, raw_dir=raw_dir)
 
-    new_version = ""
+    processed_file = None
     if run_preprocess:
-        logger.info("=== Phase 2: Preprocessing & Dataset Versioning ===")
-        new_version = preprocess_zeek_dataset(
+        logger.info("=== Phase 2: Preprocessing ===")
+        processed_file = preprocess_zeek_dataset(
             raw_input=raw_file_path,
             default_label=default_label,
             processed_dir=processed_dir,
-            merge_latest=merge_latest,
-            bump_type=bump_type,
-            desc=desc or f"Ingested & preprocessed from {log_path.name}"
+            merge_latest=merge_latest
         )
 
-    return raw_file_path, new_version
+    return raw_file_path, processed_file
 
 
 def main():
@@ -129,7 +122,7 @@ def main():
         "--processed-dir",
         type=str,
         default="data/processed",
-        help="Directory to store versioned preprocessed datasets (default: data/processed)"
+        help="Directory to store the preprocessed dataset, tracked by DVC (default: data/processed)"
     )
     parser.add_argument(
         "--default-label",
@@ -140,37 +133,24 @@ def main():
     parser.add_argument(
         "--merge-latest",
         action="store_true",
-        help="Merge into previous active dataset version"
-    )
-    parser.add_argument(
-        "--bump-type",
-        choices=["major", "minor", "patch"],
-        default="minor",
-        help="Semantic version bump type (default: minor)"
-    )
-    parser.add_argument(
-        "--desc",
-        type=str,
-        default="",
-        help="Description note in dataset version metadata"
+        help="Merge into the current dataset.csv in --processed-dir"
     )
 
     args = parser.parse_args()
 
-    raw_file, new_ver = ingest_zeek_logs(
+    raw_file, processed_file = ingest_zeek_logs(
         zeek_log_path=args.zeek_log,
         raw_dir=args.raw_dir,
         run_preprocess=not args.no_preprocess,
         default_label=args.default_label,
         processed_dir=args.processed_dir,
-        merge_latest=args.merge_latest,
-        bump_type=args.bump_type,
-        desc=args.desc
+        merge_latest=args.merge_latest
     )
 
     print(f"\n[SUCCESS] Raw Zeek log ingested to: {raw_file}")
-    if new_ver:
-        print(f"[SUCCESS] Dataset version created: {new_ver}\n")
+    if processed_file:
+        print(f"[SUCCESS] Dataset saved to: {processed_file}")
+        print(f"Next: dvc add {raw_file} {processed_file} && git add *.dvc && git commit && git tag vX.Y.Z\n")
 
 
 if __name__ == "__main__":

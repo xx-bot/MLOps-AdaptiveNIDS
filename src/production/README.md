@@ -1,6 +1,6 @@
 # Live Zeek Data Collection & Processing Pipeline (`src/production/`)
 
-This directory contains the production scripts for capturing live network traffic using **Zeek**, ingesting raw connection logs, preprocessing features to match the **UNSW-NB15** schema, and versioning the dataset into the catalog.
+This directory contains the production scripts for capturing live network traffic using **Zeek**, ingesting raw connection logs, preprocessing features to match the **UNSW-NB15** schema, and saving the dataset as `data/processed/dataset.csv`. Dataset versions are tracked with **DVC + Git tags** (see [`DVC_MIGRATION.md`](../../DVC_MIGRATION.md)).
 
 ---
 
@@ -18,7 +18,7 @@ This directory contains the production scripts for capturing live network traffi
              │
              ▼
  ┌────────────────────────┐
- │ 3. preprocess_data.py  │  --> Engineers UNSW-NB15 features & registers dataset version in data/processed/
+ │ 3. preprocess_data.py  │  --> Engineers UNSW-NB15 features & writes data/processed/dataset.csv
  └────────────────────────┘
 ```
 
@@ -73,9 +73,9 @@ sudo python3 src/production/capture.py -i eth0 -d 120 --ipv4-only --prefix produ
 
 Parse the captured `conn.log` header structure and save the un-processed raw tabular dataset into `data/raw/zeek/`.
 
-#### Full Automatic Pipeline (Ingest + Preprocess + Version):
+#### Full Automatic Pipeline (Ingest + Preprocess):
 ```bash
-python3 src/production/ingest_data.py --zeek-log zeek_logs/run_1/conn.log --desc "Live capture run 1"
+python3 src/production/ingest_data.py --zeek-log zeek_logs/run_1/conn.log
 ```
 
 #### Raw Ingestion Only (Save to `data/raw/zeek/` without preprocessing):
@@ -89,48 +89,46 @@ python3 src/production/ingest_data.py --zeek-log zeek_logs/run_1/conn.log --no-p
 
 ### Step 4: Preprocess Raw Dataset (`data/processed/`)
 
-Map raw Zeek features to the UNSW-NB15 schema, compute load metrics (`Sload`, `Dload`), derive packet sizes (`smeansz`, `dmeansz`), calculate 100-connection rolling window aggregations (`ct_srv_src`, `ct_dst_ltm`, etc.), and register a new dataset version:
+Map raw Zeek features to the UNSW-NB15 schema, compute load metrics (`Sload`, `Dload`), derive packet sizes (`smeansz`, `dmeansz`), calculate 100-connection rolling window aggregations (`ct_srv_src`, `ct_dst_ltm`, etc.), and write `data/processed/dataset.csv`:
 
 #### Preprocess the Latest Raw Dataset:
 ```bash
 python3 src/production/preprocess_data.py
 ```
 
-#### Preprocess Specific Raw File & Merge with Active Version:
+#### Preprocess Specific Raw File & Merge with the Current Dataset:
 ```bash
 python3 src/production/preprocess_data.py \
   --raw-file data/raw/zeek/raw_zeek_run_1_conn.csv \
-  --merge-latest \
-  --bump-type minor \
-  --desc "Accumulated live traffic run 1"
+  --merge-latest
 ```
 
 **CLI Options for Preprocessing**:
 - `--default-label`: Set ground truth label before SOC triage (`0` = Normal, `1` = Attack).
-- `--bump-type`: Semantic version bump (`major`, `minor`, `patch`).
-- `--merge-latest`: Accumulate new records into the previous active dataset version.
+- `--merge-latest`: Accumulate new records into the current `dataset.csv`.
 
 ---
 
-### Step 5: Verify Dataset Versions
+### Step 5: Record the Dataset Version (DVC)
 
-Inspect the dataset catalog history to verify newly registered versions:
+The scripts only write files; the version is created with DVC and Git:
 
 ```bash
-python3 src/production/preprocess_data.py --list-versions
+dvc add data/raw/zeek/raw_zeek_run_1_conn.csv data/processed/dataset.csv
+git add data/raw/zeek/raw_zeek_run_1_conn.csv.dvc data/raw/zeek/.gitignore \
+        data/processed/dataset.csv.dvc data/processed/.gitignore data/processed/dataset_metrics.json
+git commit -m "dataset: live capture run 1"
+git tag v1.1.0
+dvc push
 ```
 
-**Example Output:**
-```text
-================================================================================
-DATASET VERSIONS CATALOG (Current Active: v1.1.0)
-================================================================================
-- v1.0.0   | Created: 2026-09-28T10:24:15 | Rows: 35        | Source: zeek_live
-- v1.1.0   | Created: 2026-09-28T10:24:30 | Rows: 494       | Source: zeek_live
-================================================================================
-```
+Inspect the history and compare versions:
 
-Registered datasets are stored in `data/processed/versions/vX.X.X/dataset.csv` with complete `metadata.json` manifests.
+```bash
+git tag -l "v*"
+dvc metrics diff v1.0.0 v1.1.0 --targets data/processed/dataset_metrics.json
+git checkout v1.0.0 && dvc checkout     # go back to the data of an old version
+```
 
 ---
 
@@ -141,5 +139,5 @@ Registered datasets are stored in `data/processed/versions/vX.X.X/dataset.csv` w
 | **1. List Interfaces** | `python3 src/production/capture.py -l` | Stdout |
 | **2. Capture Packets** | `sudo python3 src/production/capture.py -i <iface> -d <sec>` | `zeek_logs/run_N/conn.log` |
 | **3. Ingest Raw Logs** | `python3 src/production/ingest_data.py --zeek-log zeek_logs/run_N/conn.log` | `data/raw/zeek/raw_zeek_run_N_conn.csv` |
-| **4. Preprocess Data** | `python3 src/production/preprocess_data.py` | `data/processed/versions/vX.X.X/` |
-| **5. View Catalog** | `python3 src/production/preprocess_data.py --list-versions` | Catalog Summary |
+| **4. Preprocess Data** | `python3 src/production/preprocess_data.py` | `data/processed/dataset.csv` |
+| **5. Record Version** | `dvc add ... && git commit && git tag vX.Y.Z && dvc push` | `*.dvc` files + Git tag |

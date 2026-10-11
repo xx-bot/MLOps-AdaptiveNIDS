@@ -12,10 +12,7 @@ src_dir = Path(__file__).resolve().parent.parent
 if str(src_dir) not in sys.path:
     sys.path.insert(0, str(src_dir))
 
-try:
-    from simulation.version_manager import DatasetVersionManager
-except ImportError:
-    from production.version_manager import DatasetVersionManager
+from dataset_io import save_dataset
 
 logging.basicConfig(
     level=logging.INFO,
@@ -36,10 +33,8 @@ def map_zeek_to_unsw_schema(df_zeek: pd.DataFrame, default_label: int = 0) -> pd
     ts = df_zeek["ts"].fillna(0.0).astype(float).values
 
     # Direct mappings
-    df["srcip"] = df_zeek["id.orig_h"]
-    df["sport"] = df_zeek["id.orig_p"].astype(str)
-    df["dstip"] = df_zeek["id.resp_h"]
-    df["dsport"] = df_zeek["id.resp_p"].astype(str)
+    df["sport"] = df_zeek["id.orig_p"]
+    df["dsport"] = df_zeek["id.resp_p"]
     df["proto"] = df_zeek["proto"].astype(str)
     df["state"] = df_zeek["conn_state"].astype(str)
     df["dur"] = duration
@@ -100,11 +95,20 @@ def map_zeek_to_unsw_schema(df_zeek: pd.DataFrame, default_label: int = 0) -> pd
     df["ct_srv_src"] = ct_srv_src
     df["ct_srv_dst"] = ct_srv_dst
     df["ct_dst_ltm"] = ct_dst_ltm
-    df["ct_src_ ltm"] = ct_src_ltm
+    df["ct_src_ltm"] = ct_src_ltm
     df["ct_src_dport_ltm"] = ct_src_dport_ltm
     df["ct_dst_sport_ltm"] = ct_dst_sport_ltm
     df["ct_dst_src_ltm"] = ct_dst_src_ltm
     df["ct_state_ttl"] = ct_state_ttl
+
+    df["sport_is_well_known"] = (df["sport"] < 1024).astype(int)
+    df["dsport_is_well_known"] = (df["dsport"] < 1024).astype(int)
+    df["sport_is_ephemeral"] = (df["sport"] >= 49152).astype(int)
+    df["dsport_is_ephemeral"] = (df["dsport"] >= 49152).astype(int)
+
+    critical_ports = {80, 443, 22, 23, 53, 445, 3389}
+    df["dsport_is_critical"] = df["dsport"].isin(critical_ports).astype(int)
+
 
     df["Label"] = default_label
 
@@ -115,36 +119,22 @@ def preprocess_zeek_dataset(
     raw_input: Union[str, Path, pd.DataFrame],
     default_label: int = 0,
     processed_dir: Union[str, Path] = "data/processed",
-    merge_latest: bool = False,
-    bump_type: str = "minor",
-    desc: str = ""
-) -> str:
+    merge_latest: bool = False
+) -> Path:
     if isinstance(raw_input, (str, Path)):
         raw_path = Path(raw_input)
         if not raw_path.exists():
             raise FileNotFoundError(f"Raw data file not found: {raw_path}")
         logger.info(f"Loading raw dataset from {raw_path}...")
         df_raw = pd.read_csv(raw_path, low_memory=False)
-        source_name = raw_path.name
     else:
         df_raw = raw_input
-        source_name = "in_memory_dataframe"
 
     logger.info(f"Preprocessing raw Zeek dataset ({len(df_raw)} records)...")
     df_processed = map_zeek_to_unsw_schema(df_raw, default_label=default_label)
     logger.info(f"Preprocessing complete. Dimensions: {df_processed.shape[0]} rows x {df_processed.shape[1]} columns.")
 
-    version_mgr = DatasetVersionManager(base_processed_dir=processed_dir)
-    description = desc or f"Preprocessed Zeek dataset from {source_name}"
-
-    new_version = version_mgr.save_new_version(
-        df=df_processed,
-        source_type="zeek_live",
-        description=description,
-        bump_type=bump_type,
-        merge_with_latest=merge_latest
-    )
-    return new_version
+    return save_dataset(df_processed, processed_dir=processed_dir, merge_with_latest=merge_latest)
 
 
 def main():
@@ -167,7 +157,7 @@ def main():
         "--processed-dir",
         type=str,
         default="data/processed",
-        help="Directory to store versioned preprocessed datasets (default: data/processed)"
+        help="Directory to store the preprocessed dataset, tracked by DVC (default: data/processed)"
     )
     parser.add_argument(
         "--default-label",
@@ -178,32 +168,10 @@ def main():
     parser.add_argument(
         "--merge-latest",
         action="store_true",
-        help="Merge with the previous active dataset version"
-    )
-    parser.add_argument(
-        "--bump-type",
-        choices=["major", "minor", "patch"],
-        default="minor",
-        help="Semantic version bump type (default: minor)"
-    )
-    parser.add_argument(
-        "--desc",
-        type=str,
-        default="",
-        help="Description note in dataset version metadata"
-    )
-    parser.add_argument(
-        "--list-versions",
-        action="store_true",
-        help="Display full dataset version history catalog table"
+        help="Merge with the current dataset.csv in --processed-dir"
     )
 
     args = parser.parse_args()
-
-    if args.list_versions:
-        version_mgr = DatasetVersionManager(base_processed_dir=args.processed_dir)
-        version_mgr.list_versions()
-        return
 
     raw_file = args.raw_file
     if not raw_file:
@@ -221,15 +189,14 @@ def main():
         raw_file = raw_files[0]
         logger.info(f"No --raw-file specified. Selected latest raw dataset: {raw_file}")
 
-    new_ver = preprocess_zeek_dataset(
+    out_path = preprocess_zeek_dataset(
         raw_input=raw_file,
         default_label=args.default_label,
         processed_dir=args.processed_dir,
-        merge_latest=args.merge_latest,
-        bump_type=args.bump_type,
-        desc=args.desc
+        merge_latest=args.merge_latest
     )
-    print(f"\n[SUCCESS] Raw Zeek dataset successfully preprocessed & saved as version: {new_ver}\n")
+    print(f"\n[SUCCESS] Raw Zeek dataset successfully preprocessed & saved to: {out_path}")
+    print(f"Next: dvc add {out_path} && git add {out_path}.dvc && git commit && git tag vX.Y.Z\n")
 
 
 if __name__ == "__main__":
