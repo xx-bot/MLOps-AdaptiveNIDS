@@ -1,0 +1,30 @@
+stages:
+  preprocess:
+    cmd: python src/simulation/preprocess.py
+    deps:
+      - src/simulation/preprocess.py
+      - data/raw/NUSW-NB15_features.csv
+      - data/raw/UNSW-NB15_1.csv
+      - data/raw/UNSW-NB15_2.csv
+      - data/raw/UNSW-NB15_3.csv
+      - data/raw/UNSW-NB15_4.csv
+    outs:
+      - data/processed/preprocessed_data.csv
+
+  split:
+    cmd: >-
+      python src/simulation/simulate_stream.py --mode prepare-split
+      --train-ratio ${split.train_ratio} --num-batches ${split.num_batches}
+    deps:
+      - src/simulation/simulate_stream.py
+      - src/dataset_io.py
+      - data/processed/preprocessed_data.csv
+    params:
+      - split.train_ratio
+      - split.num_batches
+    outs:
+      - data/processed/base_train.csv
+      - data/processed/simulation_stream
+    metrics:
+      - data/processed/base_train_metrics.json:
+          cache: false

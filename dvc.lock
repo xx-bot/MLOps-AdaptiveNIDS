@@ -1,0 +1,68 @@
+schema: '2.0'
+stages:
+  preprocess:
+    cmd: python src/simulation/preprocess.py
+    deps:
+    - path: data/raw/NUSW-NB15_features.csv
+      hash: md5
+      md5: 9e6f08b95bc19e4c4986d4d5729f3ce9
+      size: 4044
+    - path: data/raw/UNSW-NB15_1.csv
+      hash: md5
+      md5: 560dcc5981b3f6ab98027a16b053c9c1
+      size: 168979718
+    - path: data/raw/UNSW-NB15_2.csv
+      hash: md5
+      md5: 59215357fbed7c76efc6a404a8607688
+      size: 165221021
+    - path: data/raw/UNSW-NB15_3.csv
+      hash: md5
+      md5: 75e8567341edb760a23f803b920b69d4
+      size: 154588103
+    - path: data/raw/UNSW-NB15_4.csv
+      hash: md5
+      md5: f55875cab7f037fdad40b5b737e7db5e
+      size: 97588754
+    - path: src/simulation/preprocess.py
+      hash: md5
+      md5: 23597d827603f58ccb8395004a466f03
+      size: 5154
+    outs:
+    - path: data/processed/preprocessed_data.csv
+      hash: md5
+      md5: 8fb1191038236d0c8c83efdc836c6c2f
+      size: 320258982
+  split:
+    cmd: python src/simulation/simulate_stream.py --mode prepare-split 
+      --train-ratio 0.5 --num-batches 7
+    deps:
+    - path: data/processed/preprocessed_data.csv
+      hash: md5
+      md5: 8fb1191038236d0c8c83efdc836c6c2f
+      size: 320258982
+    - path: src/dataset_io.py
+      hash: md5
+      md5: 6603d5862bc99d39b87ddc23d19c0f63
+      size: 2395
+    - path: src/simulation/simulate_stream.py
+      hash: md5
+      md5: d306b1e18ee528a8ed77817f8613e4ef
+      size: 8691
+    params:
+      params.yaml:
+        split.num_batches: 7
+        split.train_ratio: 0.5
+    outs:
+    - path: data/processed/base_train.csv
+      hash: md5
+      md5: f74ce41b0262ae7bf040ccc0bbb8bd37
+      size: 162352207
+    - path: data/processed/base_train_metrics.json
+      hash: md5
+      md5: 0fd3510e21a4bfbe6c2cc42520b9bf42
+      size: 121
+    - path: data/processed/simulation_stream
+      hash: md5
+      md5: 602cb24b2074d173ae69bae5d6439b47.dir
+      size: 157910516
+      nfiles: 8
