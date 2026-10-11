@@ -1,5 +1,4 @@
 import argparse
-import datetime
 import json
 import logging
 import sys
@@ -9,7 +8,12 @@ from typing import Dict, List, Union
 import numpy as np
 import pandas as pd
 
-from version_manager import DatasetVersionManager
+# Ensure src root is in sys.path
+src_dir = Path(__file__).resolve().parent.parent
+if str(src_dir) not in sys.path:
+    sys.path.insert(0, str(src_dir))
+
+from dataset_io import BASE_TRAIN_NAME, DATASET_METRICS_NAME, save_dataset, write_metrics
 
 logging.basicConfig(
     level=logging.INFO,
@@ -55,14 +59,11 @@ def prepare_and_split(
         f"Stream Pool = {len(df_stream_pool)} rows ({(1-train_ratio)*100:.1f}%)"
     )
 
-    # 2. Daftarkan Base Train sebagai Dataset Versi v1.0.0
-    version_mgr = DatasetVersionManager(base_processed_dir=processed_dir)
-    base_version = version_mgr.save_new_version(
-        df=df_base_train,
-        source_type="base_training",
-        description=f"Base training dataset ({train_ratio*100:.0f}% initial preprocessed data)",
-        explicit_version="v1.0.0"
-    )
+    # 2. Simpan Base Train (dilacak DVC sebagai output stage `split`, versi v1.0.0 = git tag)
+    base_train_path = Path(processed_dir) / BASE_TRAIN_NAME
+    base_train_path.parent.mkdir(parents=True, exist_ok=True)
+    df_base_train.to_csv(base_train_path, index=False)
+    write_metrics(df_base_train, Path(processed_dir) / "base_train_metrics.json")
 
     # 3. Pecah sisa data menjadi N batch simulasi data bergerak
     stream_dir = Path(processed_dir) / "simulation_stream"
@@ -95,11 +96,10 @@ def prepare_and_split(
 
     # Simpan manifest antrean batch
     manifest_file = stream_dir / "stream_manifest.json"
+    # tanpa timestamp supaya output stage deterministik (hash DVC tidak berubah tiap run)
     manifest_data = {
-        "created_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
         "total_stream_records": len(df_stream_pool),
         "num_batches": num_stream_batches,
-        "base_version": base_version,
         "batches": manifest_batches
     }
     with open(manifest_file, "w", encoding="utf-8") as f:
@@ -111,7 +111,7 @@ def prepare_and_split(
     )
 
     return {
-        "base_version": base_version,
+        "base_train_file": str(base_train_path),
         "base_records": len(df_base_train),
         "stream_batches": batch_files
     }
@@ -121,10 +121,8 @@ def ingest_batch(
     batch_id: int,
     stream_dir: Union[str, Path] = "data/processed/simulation_stream",
     processed_dir: Union[str, Path] = "data/processed",
-    merge_latest: bool = False,
-    bump_type: str = "minor",
-    desc: str = ""
-) -> str:
+    merge_latest: bool = False
+) -> Path:
 
     batch_file = Path(stream_dir) / f"batch_{batch_id}.csv"
     if not batch_file.exists():
@@ -134,17 +132,7 @@ def ingest_batch(
         )
 
     df_batch = pd.read_csv(batch_file, low_memory=False)
-    version_mgr = DatasetVersionManager(base_processed_dir=processed_dir)
-
-    description = desc or f"Simulated moving data stream batch {batch_id}"
-    new_version = version_mgr.save_new_version(
-        df=df_batch,
-        source_type="simulation_stream",
-        description=description,
-        bump_type=bump_type,
-        merge_with_latest=merge_latest
-    )
-    return new_version
+    return save_dataset(df_batch, processed_dir=processed_dir, merge_with_latest=merge_latest)
 
 
 def list_simulation_stream(stream_dir: Union[str, Path] = "data/processed/simulation_stream") -> None:
@@ -159,7 +147,7 @@ def list_simulation_stream(stream_dir: Union[str, Path] = "data/processed/simula
         manifest = json.load(f)
 
     print("\n" + "=" * 80)
-    print(f"SIMULATION STREAM BATCHES (Base Version: {manifest.get('base_version', 'N/A')})")
+    print("SIMULATION STREAM BATCHES")
     print(f"Total Stream Records: {manifest.get('total_stream_records', 0)} | Total Batches: {manifest.get('num_batches', 0)}")
     print("=" * 80)
     for b in manifest.get("batches", []):
@@ -176,9 +164,9 @@ def main():
     )
     parser.add_argument(
         "--mode",
-        choices=["prepare-split", "ingest-batch", "list-stream", "list-versions"],
+        choices=["prepare-split", "ingest-batch", "list-stream"],
         required=True,
-        help="Select action: 'prepare-split', 'ingest-batch', 'list-stream', or 'list-versions'"
+        help="Select action: 'prepare-split', 'ingest-batch', or 'list-stream'"
     )
 
     # Argumen mode prepare-split
@@ -206,24 +194,12 @@ def main():
         "--batch-id",
         type=int,
         default=1,
-        help="Batch ID number to ingest into new version (1, 2, ...)"
+        help="Batch ID number to ingest into data/processed/dataset.csv (1, 2, ...)"
     )
     parser.add_argument(
         "--merge-latest",
         action="store_true",
-        help="Accumulate this batch with previous dataset version"
-    )
-    parser.add_argument(
-        "--bump-type",
-        choices=["major", "minor", "patch"],
-        default="minor",
-        help="Semantic version bump type (default: minor)"
-    )
-    parser.add_argument(
-        "--desc",
-        type=str,
-        default="",
-        help="Description note for dataset version"
+        help="Accumulate this batch with the current data/processed/dataset.csv"
     )
 
     args = parser.parse_args()
@@ -234,25 +210,21 @@ def main():
             train_ratio=args.train_ratio,
             num_stream_batches=args.num_batches
         )
-        print(f"\n[SUCCESS] Base training dataset registered as version: {res['base_version']}")
+        print(f"\n[SUCCESS] Base training dataset saved to: {res['base_train_file']}")
         print(f"Total base train data rows: {res['base_records']}")
         print(f"Total streaming simulation batches: {len(res['stream_batches'])} batches ready for use.\n")
 
     elif args.mode == "ingest-batch":
-        new_ver = ingest_batch(
+        out_path = ingest_batch(
             batch_id=args.batch_id,
-            merge_latest=args.merge_latest,
-            bump_type=args.bump_type,
-            desc=args.desc
+            merge_latest=args.merge_latest
         )
-        print(f"\n[SUCCESS] Batch {args.batch_id} successfully ingested as dataset version: {new_ver}\n")
+        print(f"\n[SUCCESS] Batch {args.batch_id} successfully ingested to: {out_path}")
+        print(f"Next: dvc add {out_path} && git add {out_path}.dvc data/processed/{DATASET_METRICS_NAME} "
+              f"&& git commit && git tag vX.Y.Z\n")
 
     elif args.mode == "list-stream":
         list_simulation_stream()
-
-    elif args.mode == "list-versions":
-        version_mgr = DatasetVersionManager()
-        version_mgr.list_versions()
 
 
 if __name__ == "__main__":

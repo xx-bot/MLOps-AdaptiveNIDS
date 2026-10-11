@@ -73,7 +73,8 @@ def preprocess_unsw_dataset(
     excluded_col = [
         "sttl", "dttl", "sloss", "dloss", "swin", "dwin", "stcpb", "dtcpb",
         "trans_depth", "res_bdy_len", "Sjit", "Djit", "Sintpkt", "Dintpkt",
-        "tcprtt", "synack", "ackdat", "ct_flw_http_mthd", "is_ftp_login", "ct_ftp_cmd"
+        "tcprtt", "synack", "ackdat", "ct_flw_http_mthd", "is_ftp_login", "ct_ftp_cmd",
+        "attack_cat"
     ]
     logger.info("Removing irrelevant / data leak columns (IP, internal TCP metrics)...")
     df_cleaned = df_combined.drop(columns=excluded_col, errors="ignore")
