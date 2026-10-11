@@ -72,7 +72,7 @@ flowchart TD
 
 ## 📡 Live Traffic Capture & Production Pipeline
 
-The production pipeline in [`src/production/`](file:///home/alex/Documents/mlops/MLOps-AdaptiveNIDS/src/production/) manages live packet capture, raw log ingestion, preprocessing, and dataset versioning.
+The production pipeline in [`src/production/`](file:///home/alex/Documents/mlops/MLOps-AdaptiveNIDS/src/production/) manages live packet capture, raw log ingestion, and preprocessing. Datasets are versioned with **DVC + Git tags**.
 
 ### 1. List Available Network Interfaces
 ```bash
@@ -91,7 +91,7 @@ sudo python3 src/production/capture.py -i wlo1 -d 60
 python3 src/production/ingest_data.py --zeek-log zeek_logs/run_1/conn.log --no-preprocess
 ```
 
-### 4. Preprocess Features & Register Version (`data/processed/`)
+### 4. Preprocess Features (`data/processed/dataset.csv`)
 ```bash
 python3 src/production/preprocess_data.py --raw-file data/raw/zeek/raw_zeek_run_1_conn.csv
 ```
@@ -208,7 +208,7 @@ MLOps-AdaptiveNIDS/
 │   └── devcontainer.json             # Codespaces container configuration
 ├── data/
 │   ├── raw/                          # Raw UNSW-NB15 dataset & raw Zeek logs (data/raw/zeek)
-│   └── processed/                    # Versioned dataset catalog (v1.0.0, v1.1.0...)
+│   └── processed/                    # DVC-tracked datasets (versions v1.0.0, v1.1.0... = Git tags)
 ├── models/                           # Trained model artifacts & checkpoints
 ├── notebook/
 │   ├── EDA.ipynb                     # Exploratory Data Analysis
@@ -217,13 +217,16 @@ MLOps-AdaptiveNIDS/
 │   ├── production/                   # Production capture, raw ingestion, & preprocessing
 │   │   ├── capture.py                # Live packet capture via Zeek engine
 │   │   ├── ingest_data.py            # Ingests conn.log into data/raw/zeek
-│   │   ├── preprocess_data.py        # Maps schema & registers dataset version
+│   │   ├── preprocess_data.py        # Maps schema & writes data/processed/dataset.csv
 │   │   └── README.md                 # Production step-by-step documentation
 │   ├── simulation/                   # Historical data streaming & simulation
 │   │   ├── preprocess.py             # Offline UNSW-NB15 dataset cleaner
-│   │   ├── simulate_stream.py        # Stream batch partitioner
-│   │   └── version_manager.py        # Dataset versioning engine
+│   │   └── simulate_stream.py        # Stream batch partitioner
+│   ├── dataset_io.py                 # Writes dataset.csv + dataset_metrics.json
 │   └── README.md                     # CLI scripts overview & detailed reference
+├── dvc.yaml                          # DVC pipeline stages (preprocess, split)
+├── params.yaml                       # DVC pipeline parameters (train_ratio, num_batches)
+├── DVC_MIGRATION.md                  # How data versioning moved to DVC
 ├── zeek_logs/                        # Captured Zeek session logs (run_1, run_2...)
 ├── zeek_unsw_mapping.json            # JSON schema mapping Zeek conn.log to UNSW-NB15
 ├── zeek_unsw_feature_mapping.md      # Detailed Zeek to UNSW feature mapping guide
