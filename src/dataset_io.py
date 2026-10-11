@@ -7,7 +7,7 @@ import pandas as pd
 
 logger = logging.getLogger("DatasetIO")
 
-# Dataset versioning itself is handled by DVC + Git tags (see DVC_MIGRATION.md).
+# Dataset versioning itself is handled by DVC + Git tags.
 # This module only decides where files live and writes the small metrics file
 # that `dvc metrics diff` compares between versions.
 DATASET_NAME = "dataset.csv"
@@ -40,11 +40,6 @@ def save_dataset(
     processed_dir: Union[str, Path] = "data/processed",
     merge_with_latest: bool = False
 ) -> Path:
-    """Write the active dataset (data/processed/dataset.csv) and its metrics file.
-
-    With merge_with_latest the new rows are appended to the current dataset.csv,
-    falling back to base_train.csv when no dataset.csv exists yet.
-    """
     processed_dir = Path(processed_dir)
     processed_dir.mkdir(parents=True, exist_ok=True)
     dataset_path = processed_dir / DATASET_NAME
