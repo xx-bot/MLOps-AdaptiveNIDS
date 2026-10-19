@@ -28,3 +28,17 @@ stages:
     metrics:
       - data/processed/base_train_metrics.json:
           cache: false
+
+  train:
+    cmd: python src/production/train.py
+    deps:
+      - src/production/train.py
+      - src/production/ids_model.py
+      - src/config.py
+      - data/processed/dataset.csv
+    params:
+      - train.data
+      - train.xgb
+    metrics:
+      - metrics/train_metrics.json:
+          cache: false

@@ -1,3 +1,29 @@
 split:
   train_ratio: 0.5
   num_batches: 7
+
+train:
+  data:
+    path: data/processed/dataset.csv   # DVC-tracked via dataset.csv.dvc
+    target: Label
+    drop_columns: [Stime, Ltime]       # timestamps are not features
+    float_columns: [dur, sbytes, dbytes, Sload, Dload, Spkts, Dpkts, smeansz, dmeansz]  # cast to float64: the MLflow signature rejects int64 for a double column and the reverse
+    test_size: 0.2
+    seed: 42
+  xgb:                                 # passed straight to XGBClassifier(**xgb)
+    tree_method: hist
+    n_estimators: 100
+    max_depth: 6
+    learning_rate: 0.3
+    random_state: 42
+  mlflow:
+    tracking_uri: sqlite:///mlflow.db  # relative paths are resolved from the project root
+    experiment: ids-unsw-nb15
+    model_name: ids-xgboost
+    register: true                     # false = log the run but do not create a registry version
+    run_name: null                     # null -> auto name from the data version
+  promote:                             # gate used by set_champion.py --eval
+    metric: recall                     # primary: attack detection
+    min_gain: 0.002                    # challenger must beat champion by at least this much
+    guard_metric: f1
+    max_guard_drop: 0.01

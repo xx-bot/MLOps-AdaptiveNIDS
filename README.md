@@ -218,14 +218,20 @@ MLOps-AdaptiveNIDS/
 │   │   ├── capture.py                # Live packet capture via Zeek engine
 │   │   ├── ingest_data.py            # Ingests conn.log into data/raw/zeek
 │   │   ├── preprocess_data.py        # Maps schema & writes data/processed/dataset.csv
+│   │   ├── train.py                  # Trains XGBoost, logs & registers it in MLflow
+│   │   ├── ids_model.py              # MLflow pyfunc wrapper (model + encoding maps)
+│   │   ├── set_champion.py           # Moves the `champion` model alias (optionally gated)
 │   │   └── README.md                 # Production step-by-step documentation
 │   ├── simulation/                   # Historical data streaming & simulation
 │   │   ├── preprocess.py             # Offline UNSW-NB15 dataset cleaner
 │   │   └── simulate_stream.py        # Stream batch partitioner
+│   ├── config.py                     # Loads params.yaml -> train (+ --set overrides)
 │   ├── dataset_io.py                 # Writes dataset.csv + dataset_metrics.json
 │   └── README.md                     # CLI scripts overview & detailed reference
-├── dvc.yaml                          # DVC pipeline stages (preprocess, split)
-├── params.yaml                       # DVC pipeline parameters (train_ratio, num_batches)
+├── dvc.yaml                          # DVC pipeline stages (preprocess, split, train)
+├── params.yaml                       # Parameters: split (train_ratio, num_batches) and train (data, XGBoost, MLflow, promotion gate)
+├── PIPELINE_FLOW.md                  # START HERE: DVC + MLflow commands, in order, and why
+├── CONFIG_GUIDE.md                   # Training settings reference (params.yaml, --set)
 ├── DVC_MIGRATION.md                  # How data versioning moved to DVC
 ├── zeek_logs/                        # Captured Zeek session logs (run_1, run_2...)
 ├── zeek_unsw_mapping.json            # JSON schema mapping Zeek conn.log to UNSW-NB15

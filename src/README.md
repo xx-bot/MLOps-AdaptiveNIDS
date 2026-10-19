@@ -12,6 +12,11 @@ The `src/` directory contains the core Python scripts responsible for managing t
 4. [`production/preprocess_data.py`](#4-preprocess_datapy) - Live Zeek Raw Dataset Preprocessing
 5. [`production/capture.py`](#5-capturepy) - Live Network Traffic Packet Capture
 6. [`dataset_io.py`](#6-dataset_iopy) - Dataset Output Helper (Core Module)
+7. [`production/train.py`](#7-productiontrainpy) - XGBoost training, logged and registered in MLflow
+8. [`production/set_champion.py`](#8-productionset_championpy) - Move the `champion` model alias, optionally gated by an evaluation
+9. [`config.py`](#9-configpy) - Loads `params.yaml -> train` plus `--set` overrides (Core Module)
+
+> Training and promotion are explained step by step in [`../PIPELINE_FLOW.md`](../PIPELINE_FLOW.md); the settings in [`../CONFIG_GUIDE.md`](../CONFIG_GUIDE.md).
 
 > Dataset versioning is handled by **DVC + Git tags**
 ---
@@ -152,3 +157,59 @@ sudo python3 src/production/capture.py -i eth0 --ipv4-only
 
 ### 6. `dataset_io.py`
 **Function**: Small helper module (`save_dataset`, `write_metrics`). Contains no CLI parser; imported by `simulation/simulate_stream.py` and `production/preprocess_data.py`. It writes `data/processed/dataset.csv` (optionally merged with the current one) and `dataset_metrics.json` (record count, feature count, label distribution). It does **not** version anything: versions are DVC-tracked files plus Git tags (`v1.0.0`, `v1.1.0`, ...), see [`DVC_MIGRATION.md`](../DVC_MIGRATION.md).
+
+
+---
+
+### 7. `production/train.py`
+**Function**: Trains an XGBoost classifier on `data/processed/dataset.csv` (path and all settings come from `params.yaml -> train`), frequency-encodes `proto`/`state`/`service`, logs params, metrics, the final config and version tags (`data_md5`, `data_git_tag`, `git_commit`) to MLflow, and logs the model as an `IDSModel` pyfunc (model + encoding maps in one). It registers a new version of `ids-xgboost` unless `mlflow.register` is `false`, and writes `metrics/train_metrics.json` for DVC. It is also the `train` stage in `dvc.yaml`.
+
+#### CLI Arguments (`argparse`):
+| Argument | Type | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `--set` | `str` (repeatable) | none | One-off override of `params.yaml -> train`, as `key=value`, e.g. `xgb.max_depth=10`, `mlflow.register=false`. |
+
+#### Usage Examples:
+```bash
+# Train with the defaults from params.yaml (through DVC, recorded in dvc.lock)
+dvc repro train
+
+# Train directly, with a one-off change
+python src/production/train.py --set xgb.max_depth=10 --set mlflow.run_name=xgb-deep
+
+# Smoke test: logged to MLflow, but no registry version
+python src/production/train.py --set mlflow.register=false
+```
+
+---
+
+### 8. `production/set_champion.py`
+**Function**: Moves the `champion` alias of the registered model `ids-xgboost`, which is what `models:/ids-xgboost@champion` loads. Without `--eval` it is a forced move (first champion, rollback). With `--eval` it first compares the champion and the challenger on a CSV that neither model trained on, and moves the alias only if the gate in `params.yaml -> train.promote` passes.
+
+#### CLI Arguments (`argparse`):
+| Argument | Type | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `version` | `str` (positional) | newest version | Model version to promote (the challenger in `--eval` mode). |
+| `--eval` | `str` | none | CSV (relative to the project root) to compare champion and challenger on, e.g. `data/processed/simulation_stream/batch_4.csv`. |
+| `--dry-run` | `flag` | `False` | With `--eval`: print the comparison and verdict, change nothing. |
+| `--set` | `str` (repeatable) | none | Override `params.yaml -> train`, e.g. `promote.min_gain=0`. |
+
+Exit code with `--eval`: `0` = gate passed, `1` = failed.
+
+#### Usage Examples:
+```bash
+# Force the newest version to be the champion (first champion)
+python src/production/set_champion.py
+
+# Roll back to version 1
+python src/production/set_champion.py 1
+
+# Compare on batch 4 without changing anything, then for real
+python src/production/set_champion.py --eval data/processed/simulation_stream/batch_4.csv --dry-run
+python src/production/set_champion.py --eval data/processed/simulation_stream/batch_4.csv
+```
+
+---
+
+### 9. `config.py`
+**Function**: Small helper module (`load_config`, `flatten`, `resolve_tracking_uri`). Contains no CLI parser; imported by `production/train.py` and `production/set_champion.py`. `load_config()` reads `params.yaml -> train` and applies `--set key=value` overrides.
