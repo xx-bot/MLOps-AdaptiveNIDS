@@ -67,3 +67,53 @@ stages:
       md5: 602cb24b2074d173ae69bae5d6439b47.dir
       size: 157910516
       nfiles: 8
+  train:
+    cmd: python src/production/train.py
+    deps:
+    - path: data/processed/dataset.csv
+      hash: md5
+      md5: 9a40ada25b810c3ddc66f81b06ae99c8
+      size: 250518234
+    - path: src/config.py
+      hash: md5
+      md5: 9266c1947bf0166b494c4dde8856da80
+      size: 1642
+    - path: src/production/ids_model.py
+      hash: md5
+      md5: 1677cd9ca81a63ef25fdb226f6775bfc
+      size: 1200
+    - path: src/production/train.py
+      hash: md5
+      md5: 9b267a9e25691258bf6e599e0808f9ad
+      size: 6730
+    params:
+      params.yaml:
+        train.data:
+          path: data/processed/dataset.csv
+          target: Label
+          drop_columns:
+          - Stime
+          - Ltime
+          float_columns:
+          - dur
+          - sbytes
+          - dbytes
+          - Sload
+          - Dload
+          - Spkts
+          - Dpkts
+          - smeansz
+          - dmeansz
+          test_size: 0.2
+          seed: 42
+        train.xgb:
+          tree_method: hist
+          n_estimators: 100
+          max_depth: 6
+          learning_rate: 0.3
+          random_state: 42
+    outs:
+    - path: metrics/train_metrics.json
+      hash: md5
+      md5: a4ba4498144168ba9468518122d265fb
+      size: 162
