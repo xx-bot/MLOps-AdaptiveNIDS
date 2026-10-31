@@ -20,6 +20,7 @@ train:
     tracking_uri: sqlite:///mlflow.db  # relative paths are resolved from the project root
     experiment: ids-unsw-nb15
     model_name: ids-xgboost
+    serving_model_name: adaptive-nids-xgb   # LK-07: registry the inference service reads (stages + aliases)
     register: true                     # false = log the run but do not create a registry version
     run_name: null                     # null -> auto name from the data version
   promote:                             # gate used by set_champion.py --eval
