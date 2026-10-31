@@ -1,0 +1,35 @@
+model:
+  name: adaptive-nids-xgb
+  version: 1
+  stage: Production
+  aliases:
+  - champion
+  uri: models:/adaptive-nids-xgb/1
+  stage_uri: models:/adaptive-nids-xgb/Production
+  source: models:/m-6590921400c6493294228d2433410436
+  run_id: 3f465e6b4296418dac3a2e799c328510
+  run_name: xgb-v1.1.0
+  description: ''
+reason: Champion model
+local_copy:
+  path: models/production
+  dvc_file: models/production.dvc
+metrics:
+  accuracy: 0.9966
+  f1: 0.9724
+  precision: 0.9763
+  recall: 0.9684
+  roc_auc: 0.9999
+params:
+  xgb.learning_rate: '0.3'
+  xgb.max_depth: '6'
+  xgb.n_estimators: '100'
+  xgb.random_state: '42'
+  xgb.tree_method: hist
+lineage:
+  data_path: data/processed/dataset.csv
+  data_dvc_file: data/processed/dataset.csv.dvc
+  data_md5: 21be6cc162573182b8ae89df7f65278b
+  data_git_tag: v1.1.0
+  git_commit: 77df3717457f9f4d5f8d277c3e96a40f8bb4316e
+exported_at: '2026-10-31T14:22:48+00:00'
