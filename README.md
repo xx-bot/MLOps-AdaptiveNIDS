@@ -100,6 +100,48 @@ For detailed step-by-step production documentation, see [`src/production/README.
 
 ---
 
+## 🚀 Active Inference Model (MLflow Model Registry)
+
+| Item | Value |
+| :--- | :--- |
+| Registered model | `adaptive-nids-xgb` |
+| **Production version** | **v1**: `models:/adaptive-nids-xgb/Production` (alias `@champion`) |
+| Trained on | dataset `v1.1.0` (base + batch 1), md5 `21be6cc162573182b8ae89df7f65278b` |
+| XGBoost params | `n_estimators=100, max_depth=6, learning_rate=0.3` |
+| Hold-out (batch 7, never trained on) | recall `0.9736`, F1 `0.9775`, precision `0.9815` |
+| Reference files | [`models/production_model.yaml`](models/production_model.yaml), [`models/production.dvc`](models/production.dvc) (DVC) |
+
+**Why this version.** v1 is the champion of the continual-retraining loop: every model retrained on more data
+(data v1.2.2–v1.6.0) was evaluated against it on the next unseen batch, and none reached the promotion gate
+(+0.002 recall, F1 drop ≤ 0.01); they all had 0.13–0.24 pp lower recall. v2 kept the same data (v1.1.0) and only
+tuned XGBoost (n_estimators 100→200, max_depth 6→8, learning_rate 0.3→0.1). On the hold-out batch 7 it had slightly
+higher F1 (0.9777 vs 0.9775) and precision (0.9822 vs 0.9815), but lower recall (0.9733 vs 0.9736), so it failed the
+gate and was archived. For an IDS a missed attack costs more than a false alarm, so recall decides.
+
+**Version history**
+
+| Version | Source | Stage | Note |
+| :--- | :--- | :--- | :--- |
+| v1 | champion of `ids-xgboost` (v1, data v1.1.0), `n_estimators=100, max_depth=6, learning_rate=0.3` | **Production** (`@champion`) | highest recall on unseen data |
+| v2 | same data, `n_estimators=200, max_depth=8, learning_rate=0.1` | Archived | failed the gate (recall −0.0003) |
+
+**Load it**
+
+```python
+import mlflow
+mlflow.set_tracking_uri("sqlite:///mlflow.db")
+model = mlflow.pyfunc.load_model("models:/adaptive-nids-xgb/Production")
+pred = model.predict(df_raw)   # raw UNSW-mapped features; float columns as float64
+```
+
+**Verify it:** `python src/production/verify_inference.py` loads the Production model, scores batch 7, measures
+latency/throughput, and checks that the stage, the `@champion` alias and the DVC copy serve the same model (`READY`).
+
+**Change or roll back:** `python src/production/transition_stage.py <version> Production --archive-existing`,
+then `python src/production/export_model_metadata.py` + `dvc add models/production` and commit.
+
+---
+
 ## 🚀 Setup & Installation Guide
 
 ### Prerequisites
@@ -209,7 +251,9 @@ MLOps-AdaptiveNIDS/
 ├── data/
 │   ├── raw/                          # Raw UNSW-NB15 dataset & raw Zeek logs (data/raw/zeek)
 │   └── processed/                    # DVC-tracked datasets (versions v1.0.0, v1.1.0... = Git tags)
-├── models/                           # Trained model artifacts & checkpoints
+├── models/
+│   ├── production.dvc                # DVC pointer to the exported Production model (models/production/)
+│   └── production_model.yaml         # Production model metadata: version, run_id, metrics, data lineage
 ├── notebook/
 │   ├── EDA.ipynb                     # Exploratory Data Analysis
 │   └── preprocessing.ipynb           # Feature engineering & UNSW-NB15 schema mapping
@@ -221,6 +265,9 @@ MLOps-AdaptiveNIDS/
 │   │   ├── train.py                  # Trains XGBoost, logs & registers it in MLflow
 │   │   ├── ids_model.py              # MLflow pyfunc wrapper (model + encoding maps)
 │   │   ├── set_champion.py           # Moves the `champion` model alias (optionally gated)
+│   │   ├── transition_stage.py       # Moves a model version None -> Staging -> Production (-> Archived), syncs aliases
+│   │   ├── export_model_metadata.py  # Exports the Production model + production_model.yaml for DVC
+│   │   ├── verify_inference.py       # Loads models:/adaptive-nids-xgb/Production and checks predictions
 │   │   └── README.md                 # Production step-by-step documentation
 │   ├── simulation/                   # Historical data streaming & simulation
 │   │   ├── preprocess.py             # Offline UNSW-NB15 dataset cleaner
@@ -230,6 +277,8 @@ MLOps-AdaptiveNIDS/
 │   └── README.md                     # CLI scripts overview & detailed reference
 ├── dvc.yaml                          # DVC pipeline stages (preprocess, split, train)
 ├── params.yaml                       # Parameters: split (train_ratio, num_batches) and train (data, XGBoost, MLflow, promotion gate)
+├── docker-compose.yml                # SeaweedFS S3 server used as the DVC remote
+├── .env.example                      # S3 credentials template (copy to .env)
 ├── PIPELINE_FLOW.md                  # START HERE: DVC + MLflow commands, in order, and why
 ├── CONFIG_GUIDE.md                   # Training settings reference (params.yaml, --set)
 ├── DVC_MIGRATION.md                  # How data versioning moved to DVC
