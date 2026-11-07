@@ -223,16 +223,64 @@ zeek --version
 
 GitHub Actions runs the unit tests on pushes to `main` and pull requests targeting `main`.
 The tests use small fixtures and temporary files, so they do not need DVC data, Zeek,
-Docker, or a running MLflow service. This is the testing foundation; automated training,
-performance validation, and Staging registration are planned separately.
+Docker, or a running MLflow service. After tests pass on `main`, the pipeline uses a
+self-hosted runner to pull DVC data, train a candidate, evaluate Recall/F1/PR-AUC,
+and register passing candidates in Staging.
 
 ```bash
 python -m pip install -r requirements-test.txt
 python -m pytest -q --junitxml=reports/pytest.xml
 ```
 
-See [tests/README.md](tests/README.md) for uv commands, test coverage, and CI reports,
-or [the implementation guide](docs/code-as-trigger/README.md) for the remaining stages.
+For a uv-managed environment without pip:
+
+```bash
+uv pip install --python .venv/bin/python -r requirements-test.txt
+.venv/bin/python -m pytest -q --junitxml=reports/pytest.xml
+```
+
+The suite contains 52 cases: configuration (7), encoding/inference (7), Zeek
+preprocessing (2), dataset storage (4), and validation/registry safeguards (32).
+The original 18 package-A cases are retained. Unit tests use mocks for the registry;
+model performance is measured separately after training.
+
+### Run the complete automation pipeline
+
+| Job | Execution |
+|---|---|
+| `automated-testing` | GitHub-hosted runner; runs pytest on pushes to `main` and PRs targeting `main`. |
+| `train-validate-register` | Self-hosted runner; runs after tests pass on a push to `main` or a manual run on `main`. |
+
+Before pushing the pipeline changes:
+
+1. Start the local SeaweedFS service with `docker compose up -d` and publish the
+   pinned data with `dvc push data/processed/dataset.csv.dvc data/processed/simulation_stream`.
+2. In GitHub **Settings → Actions → Runners**, add a Linux x64 self-hosted runner on
+   the machine with access to local storage. Install it outside your personal repo,
+   add the custom label `adaptive-nids`, and keep `./run.sh` running during the demo.
+3. In **Settings → Secrets and variables → Actions**, add these repository settings:
+
+   | Type | Name | Value |
+   |---|---|---|
+   | Variable | `MLFLOW_TRACKING_URI` | Absolute SQLite URI, e.g. `sqlite:////absolute/path/to/mlflow.db`; use the existing database to retain registry history. |
+   | Variable | `MLFLOW_ARTIFACT_ROOT` | Absolute persistent directory outside the Actions checkout, e.g. `/home/alex/nids-automation/artifacts`. |
+   | Optional variable | `DVC_S3_ENDPOINT` | Defaults to `http://127.0.0.1:8333`. |
+   | Secret | `S3_ACCESS_KEY` | The access key configured for the local SeaweedFS service. |
+   | Secret | `S3_SECRET_KEY` | The matching secret key. |
+
+   The two storage credentials are already defined in the local, Git-ignored `.env`
+   used by Docker Compose. Copy their values into GitHub secrets; do not commit the file.
+
+The pipeline pulls versioned DVC data, verifies hashes and train/evaluation separation,
+trains without registration, and evaluates on the pinned batch 7 benchmark. Recall,
+F1, and PR-AUC (Average Precision) must each be at least **0.95**, as agreed for package B.
+If any metric fails, the job fails and registration is skipped. It does not automatically
+retry training or tune parameters. Passing candidates enter `Staging` with alias
+`challenger`; Production and `champion` are retained.
+
+After a push, save the URL of the specific Actions run and inspect both jobs. The
+pipeline uploads JSON evidence and writes a metrics summary even when later steps fail.
+Without an online runner carrying all required labels, the training job remains queued.
 
 ---
 

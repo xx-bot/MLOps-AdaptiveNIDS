@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 import yaml
@@ -22,6 +23,13 @@ def load_config(overrides=()) -> dict:
     """
     with open(PARAMS_FILE, encoding="utf-8") as f:
         cfg = yaml.safe_load(f)["train"]
+
+    # A runner can share persistent tracking storage across separate checkouts.
+    # Explicit --set overrides still take precedence.
+    if os.environ.get("MLFLOW_TRACKING_URI"):
+        cfg["mlflow"]["tracking_uri"] = os.environ["MLFLOW_TRACKING_URI"]
+    if os.environ.get("MLFLOW_EXPERIMENT_NAME"):
+        cfg["mlflow"]["experiment"] = os.environ["MLFLOW_EXPERIMENT_NAME"]
 
     for item in overrides:
         key, sep, raw = item.partition("=")

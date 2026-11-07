@@ -1,0 +1,5 @@
+-r requirements-test.txt
+# Full MLflow includes the database/registry backend; skinny suffices for unit tests.
+mlflow
+dvc
+dvc-s3

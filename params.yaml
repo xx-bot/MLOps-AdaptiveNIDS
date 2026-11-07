@@ -28,3 +28,12 @@ train:
     min_gain: 0.002                    # challenger must beat champion by at least this much
     guard_metric: f1
     max_guard_drop: 0.01
+  validation:                          # absolute Staging gate, separate from champion promotion
+    data_path: data/processed/simulation_stream/batch_7.csv
+    data_md5: 2705531ab54ff9c814bee03ce97baaa3  # batch_7 entry in the DVC split directory
+    pr_auc_definition: average_precision
+    # Package-B policy agreed with the project owner; NOT specified in the LK-01 PDF.
+    min_metrics:
+      recall: 0.95
+      f1: 0.95
+      pr_auc: 0.95

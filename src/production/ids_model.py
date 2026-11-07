@@ -27,3 +27,7 @@ class IDSModel(mlflow.pyfunc.PythonModel):
     def predict(self, context, model_input: pd.DataFrame, params=None):
         X = self._encode(model_input)
         return self.model.predict(X)
+
+    def predict_proba(self, model_input: pd.DataFrame):
+        """Attack probabilities using the very same encoding as label prediction."""
+        return self.model.predict_proba(self._encode(model_input))[:, 1]

@@ -11,8 +11,9 @@ permissions:
   contents: read
 
 concurrency:
-  group: mlops-tests-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: mlops-${{ github.workflow }}-${{ github.ref }}
+  # Registry updates on main must finish; only obsolete PR tests are canceled.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   automated-testing:
@@ -46,3 +47,111 @@ jobs:
           path: reports/pytest.xml
           if-no-files-found: warn
           retention-days: 14
+
+  train-validate-register:
+    name: Training, evaluation and Staging
+    needs: automated-testing
+    # PR code is tested on GitHub-hosted machines, without local storage credentials.
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: [self-hosted, linux, x64, adaptive-nids]
+    timeout-minutes: 90
+    env:
+      PIPELINE_REPORT_DIR: reports/${{ github.run_id }}-${{ github.run_attempt }}
+      MLFLOW_TRACKING_URI: ${{ vars.MLFLOW_TRACKING_URI }}
+      MLFLOW_ARTIFACT_ROOT: ${{ vars.MLFLOW_ARTIFACT_ROOT }}
+      MLFLOW_EXPERIMENT_NAME: ids-automation
+      DVC_S3_ENDPOINT: ${{ vars.DVC_S3_ENDPOINT || 'http://127.0.0.1:8333' }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.S3_ACCESS_KEY }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.S3_SECRET_KEY }}
+      OMP_NUM_THREADS: "2"
+    steps:
+      - name: Checkout exact commit and data tags
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-test.txt
+            requirements-automation.txt
+
+      - name: Check persistent local storage configuration
+        shell: bash
+        run: |
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          uri = os.environ.get("MLFLOW_TRACKING_URI", "")
+          root = os.environ.get("MLFLOW_ARTIFACT_ROOT", "")
+          if not uri or not root:
+              raise SystemExit("Set repository variables MLFLOW_TRACKING_URI and MLFLOW_ARTIFACT_ROOT; see README.md: Run the complete automation pipeline")
+          artifact_root = Path(root).expanduser()
+          if not artifact_root.is_absolute() or artifact_root.resolve().is_relative_to(Path.cwd().resolve()):
+              raise SystemExit("MLFLOW_ARTIFACT_ROOT must be an absolute directory outside the Actions checkout")
+          if uri.startswith("sqlite:///"):
+              database = Path(uri[len("sqlite:///"):])
+              if not database.is_absolute() or database.resolve().is_relative_to(Path.cwd().resolve()):
+                  raise SystemExit("SQLite must use an absolute persistent path outside the Actions checkout")
+              database.parent.mkdir(parents=True, exist_ok=True)
+          artifact_root.mkdir(parents=True, exist_ok=True)
+          if not os.environ.get("AWS_ACCESS_KEY_ID") or not os.environ.get("AWS_SECRET_ACCESS_KEY"):
+              raise SystemExit("Set S3_ACCESS_KEY and S3_SECRET_KEY in repository Actions secrets")
+          PY
+
+      - name: Install pipeline dependencies in an isolated environment
+        shell: bash
+        run: |
+          python -m venv "$RUNNER_TEMP/nids-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          "$RUNNER_TEMP/nids-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT/bin/python" -m pip install -r requirements-automation.txt
+          echo "$RUNNER_TEMP/nids-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT/bin" >> "$GITHUB_PATH"
+
+      - name: Pull pinned training and evaluation data from DVC
+        shell: bash
+        run: |
+          dvc remote modify --local s3store endpointurl "$DVC_S3_ENDPOINT"
+          dvc pull data/processed/dataset.csv.dvc data/processed/simulation_stream
+
+      - name: Validate data snapshots, labels and train/eval separation
+        run: python src/production/check_training_data.py --output "$PIPELINE_REPORT_DIR/data_validation.json"
+
+      - name: Train candidate without registering it
+        run: >-
+          python src/production/train.py --set mlflow.register=false
+          --data-report "$PIPELINE_REPORT_DIR/data_validation.json"
+          --manifest "$PIPELINE_REPORT_DIR/training_manifest.json"
+          --artifacts-dir "$RUNNER_TEMP/nids-model-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          --metrics-output "$PIPELINE_REPORT_DIR/train_metrics.json"
+
+      - name: Evaluate candidate and enforce performance thresholds
+        run: >-
+          python src/production/evaluate_model.py
+          --manifest "$PIPELINE_REPORT_DIR/training_manifest.json"
+          --output "$PIPELINE_REPORT_DIR/validation.json"
+
+      - name: Register validated candidate in Staging
+        run: >-
+          python src/production/register_validated_model.py
+          --manifest "$PIPELINE_REPORT_DIR/training_manifest.json"
+          --validation "$PIPELINE_REPORT_DIR/validation.json"
+          --output "$PIPELINE_REPORT_DIR/registration.json"
+
+      - name: Write pipeline summary
+        if: ${{ always() }}
+        shell: bash
+        run: python src/production/summarize_pipeline.py --reports "$PIPELINE_REPORT_DIR" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload pipeline reports
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: pipeline-reports-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ env.PIPELINE_REPORT_DIR }}/*.json
+          if-no-files-found: warn
+          retention-days: 30

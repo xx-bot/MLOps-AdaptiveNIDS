@@ -34,11 +34,13 @@ stages:
     deps:
       - src/production/train.py
       - src/production/ids_model.py
+      - src/production/pipeline_utils.py
       - src/config.py
       - data/processed/dataset.csv
     params:
       - train.data
       - train.xgb
+      - train.validation
     metrics:
       - metrics/train_metrics.json:
           cache: false

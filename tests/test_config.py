@@ -74,3 +74,11 @@ def test_flatten_preserves_non_dict_values():
         "xgb.max_depth": 6,
         "register": False,
     }
+
+
+def test_runner_environment_and_explicit_override_precedence(params_file, monkeypatch):
+    monkeypatch.setenv("MLFLOW_TRACKING_URI", "http://tracking.example.test")
+    monkeypatch.setenv("MLFLOW_EXPERIMENT_NAME", "ids-automation")
+    assert config.load_config()["mlflow"]["tracking_uri"] == "http://tracking.example.test"
+    assert config.load_config()["mlflow"]["experiment"] == "ids-automation"
+    assert config.load_config(["mlflow.tracking_uri=sqlite:///custom.db"])["mlflow"]["tracking_uri"] == "sqlite:///custom.db"

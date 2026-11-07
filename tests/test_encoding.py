@@ -77,3 +77,19 @@ def test_serving_rejects_missing_required_numeric_feature():
 
     with pytest.raises(KeyError, match="dur"):
         wrapper._encode(pd.DataFrame({"proto": ["tcp"]}))
+
+
+def test_probabilities_use_the_same_encoding_as_label_prediction():
+    wrapper = IDSModel()
+    wrapper.freq_maps = {"proto": {"tcp": 0.8}}
+    wrapper.feature_names = ["dur", "proto_freq"]
+
+    class ProbabilityClassifier:
+        def predict_proba(self, features):
+            assert list(features.columns) == ["dur", "proto_freq"]
+            assert features["proto_freq"].tolist() == [0.8, 0.0]
+            return np.array([[0.1, 0.9], [0.7, 0.3]])
+
+    wrapper.model = ProbabilityClassifier()
+    frame = pd.DataFrame({"proto": ["tcp", "icmp"], "dur": [1.0, 2.0]})
+    np.testing.assert_allclose(wrapper.predict_proba(frame), [0.9, 0.3])

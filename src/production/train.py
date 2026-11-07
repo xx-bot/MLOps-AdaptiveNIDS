@@ -1,5 +1,6 @@
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
@@ -12,7 +13,7 @@ import xgboost as xgb
 import mlflow
 import mlflow.pyfunc
 from mlflow.models import infer_signature
-from sklearn.metrics import (accuracy_score, f1_score, precision_score,
+from sklearn.metrics import (accuracy_score, average_precision_score, f1_score, precision_score,
                              recall_score, roc_auc_score)
 from sklearn.model_selection import train_test_split
 
@@ -23,6 +24,8 @@ if str(src_dir) not in sys.path:
 
 from config import BASE_PATH, flatten, load_config, resolve_tracking_uri
 from ids_model import IDSModel
+from pipeline_utils import (fingerprint, prepare_frame, project_path, read_json,
+                            training_snapshot, write_json)
 
 
 class Frequency_encoder:
@@ -69,21 +72,15 @@ def data_version(data_path):
     return md5, "untagged"
 
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Train XGBoost, log it to MLflow and (optionally) register it.")
-    parser.add_argument("--set", dest="overrides", action="append", default=[],
-                        help="one-off override of params.yaml -> train, e.g. --set xgb.max_depth=10 (repeatable)")
-    args = parser.parse_args()
-    cfg = load_config(args.overrides)
-
-    # dataset path
-    df = pd.read_csv(BASE_PATH / cfg["data"]["path"])
-    df = df.drop(columns=cfg["data"]["drop_columns"])
-    # the MLflow signature is strict about int64 vs float64, so make these columns float64 whatever the data version
-    df[cfg["data"]["float_columns"]] = df[cfg["data"]["float_columns"]].astype("float64")
-
-    target = cfg["data"]["target"]
-    X, y = df.drop(columns=[target]), df[target]
+def train_model(cfg, manifest_path, artifacts_dir, metrics_path, overrides=(), data_report=None):
+    training_data = training_snapshot(cfg)
+    evaluation_data = {"path": cfg["validation"]["data_path"], "md5": cfg["validation"]["data_md5"]}
+    if data_report is not None:
+        report = read_json(data_report)
+        if report.get("passed") is not True or report.get("training_data") != training_data or report.get("evaluation_data") != evaluation_data:
+            raise ValueError("Data validation report does not match this training/evaluation snapshot")
+    df = pd.read_csv(project_path(cfg["data"]["path"]))
+    X, y = prepare_frame(df, cfg["data"])
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, stratify=y, test_size=cfg["data"]["test_size"], random_state=cfg["data"]["seed"])
 
@@ -92,11 +89,17 @@ if __name__ == "__main__":
     X_test_encoded = fe.transform(X_test)
 
     mlflow.set_tracking_uri(resolve_tracking_uri(cfg["mlflow"]["tracking_uri"]))
+    artifact_root = os.environ.get("MLFLOW_ARTIFACT_ROOT")
+    if artifact_root and mlflow.get_experiment_by_name(cfg["mlflow"]["experiment"]) is None:
+        # Keep artifacts outside the Actions checkout, which is cleaned each run.
+        location = Path(artifact_root).expanduser().resolve().as_uri()
+        mlflow.create_experiment(cfg["mlflow"]["experiment"], artifact_location=location)
     mlflow.set_experiment(cfg["mlflow"]["experiment"])
 
     params = cfg["xgb"]
     data_md5, data_tag = data_version(cfg["data"]["path"])
     run_name = cfg["mlflow"]["run_name"] or f"xgb-{data_tag}"
+    commit = git("rev-parse", "HEAD")
 
     with mlflow.start_run(run_name=run_name) as run:
         # 1) Train
@@ -112,6 +115,7 @@ if __name__ == "__main__":
             "precision": precision_score(y_test, y_pred),
             "recall": recall_score(y_test, y_pred),
             "roc_auc": roc_auc_score(y_test, y_proba),   # use probabilities, not hard labels
+            "pr_auc": average_precision_score(y_test, y_proba),
         }
 
         # 3) Track params + metrics + the exact config + data/code version
@@ -121,11 +125,13 @@ if __name__ == "__main__":
                            "n_features": X_train_encoded.shape[1]})
         mlflow.log_dict(cfg, "config.yaml")                   # the final config, verbatim
         mlflow.set_tags({"data_md5": data_md5, "data_git_tag": data_tag,
-                         "git_commit": git("rev-parse", "HEAD"),
-                         "set_overrides": ",".join(args.overrides) or "none"})
+                         "git_commit": commit,
+                         "github_run_id": os.environ.get("GITHUB_RUN_ID", "local"),
+                         "set_overrides": ",".join(overrides) or "none"})
 
         # 4) Save the pieces the wrapper needs
-        artifacts_dir = BASE_PATH / "artifacts"; artifacts_dir.mkdir(exist_ok=True)
+        artifacts_dir = Path(artifacts_dir)
+        artifacts_dir.mkdir(parents=True, exist_ok=True)
         xgb_model.save_model(str(artifacts_dir / "xgb_model.json"))
         with open(artifacts_dir / "encoding_maps.json", "w") as f:
             json.dump({
@@ -138,7 +144,7 @@ if __name__ == "__main__":
 
         # 6) Log the combined model; register it only if params.yaml / --set says so
         log_kwargs = {"registered_model_name": cfg["mlflow"]["model_name"]} if cfg["mlflow"]["register"] else {}
-        mlflow.pyfunc.log_model(
+        model_info = mlflow.pyfunc.log_model(
             name="model",                                  # (older MLflow 2.x: artifact_path="model")
             python_model=IDSModel(),
             artifacts={
@@ -154,8 +160,43 @@ if __name__ == "__main__":
         )
 
         # 7) Small file that DVC tracks as this stage's metrics (see dvc.yaml)
-        (BASE_PATH / "metrics").mkdir(exist_ok=True)
-        (BASE_PATH / "metrics" / "train_metrics.json").write_text(
-            json.dumps({k: float(v) for k, v in metrics.items()}, indent=2))
+        metrics = {k: float(v) for k, v in metrics.items()}
+        write_json(metrics_path, metrics)
+        manifest = {
+            "schema_version": 1,
+            "run_id": run.info.run_id,
+            "model_uri": model_info.model_uri,
+            "logged_model_id": model_info.model_id,
+            "git_commit": commit,
+            "working_tree_dirty": bool(git("status", "--porcelain", "--untracked-files=no")),
+            "training_data": training_data,
+            "evaluation_data": evaluation_data,
+            "config": cfg,
+            "config_sha256": fingerprint(cfg),
+            "metrics": metrics,
+            "github_run_id": os.environ.get("GITHUB_RUN_ID"),
+        }
 
-        print("run_id:", run.info.run_id, metrics)
+    # Publish only after the MLflow run has exited successfully.
+    write_json(manifest_path, manifest)
+    print("TRAIN SUCCESS | run_id:", manifest["run_id"], "| model_uri:", manifest["model_uri"])
+    print("Internal test-split metrics:", json.dumps(metrics))
+    return manifest
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Train XGBoost, log it to MLflow and (optionally) register it.")
+    parser.add_argument("--set", dest="overrides", action="append", default=[],
+                        help="override params.yaml -> train, e.g. --set xgb.max_depth=10 (repeatable)")
+    parser.add_argument("--manifest", default="reports/training_manifest.json")
+    parser.add_argument("--artifacts-dir", default="artifacts")
+    parser.add_argument("--metrics-output", default="metrics/train_metrics.json")
+    parser.add_argument("--data-report", help="report produced by check_training_data.py")
+    args = parser.parse_args()
+    Path(args.manifest).unlink(missing_ok=True)
+    train_model(load_config(args.overrides), args.manifest, args.artifacts_dir,
+                args.metrics_output, args.overrides, args.data_report)
+
+
+if __name__ == "__main__":
+    main()
