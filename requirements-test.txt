@@ -1,0 +1,9 @@
+# Use the project's pinned versions without installing DVC, notebooks, or servers.
+-c requirements.txt
+pytest==9.0.2
+numpy
+pandas
+PyYAML
+scikit-learn
+xgboost
+mlflow-skinny

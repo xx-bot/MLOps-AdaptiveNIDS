@@ -219,6 +219,23 @@ zeek --version
 
 ---
 
+## Automated testing
+
+GitHub Actions runs the unit tests on pushes to `main` and pull requests targeting `main`.
+The tests use small fixtures and temporary files, so they do not need DVC data, Zeek,
+Docker, or a running MLflow service. This is the testing foundation; automated training,
+performance validation, and Staging registration are planned separately.
+
+```bash
+python -m pip install -r requirements-test.txt
+python -m pytest -q --junitxml=reports/pytest.xml
+```
+
+See [tests/README.md](tests/README.md) for uv commands, test coverage, and CI reports,
+or [the implementation guide](docs/code-as-trigger/README.md) for the remaining stages.
+
+---
+
 ## 💻 GitHub Codespaces Setup
 
 1. Navigate to [`xx-bot/MLOps-AdaptiveNIDS`](https://github.com/xx-bot/MLOps-AdaptiveNIDS).

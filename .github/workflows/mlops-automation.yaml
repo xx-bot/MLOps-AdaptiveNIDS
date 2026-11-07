@@ -1,0 +1,48 @@
+name: MLOps Automation
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mlops-tests-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  automated-testing:
+    name: Automated testing (Python 3.11)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-test.txt
+
+      - name: Install test dependencies
+        run: python -m pip install -r requirements-test.txt
+
+      - name: Run unit tests
+        run: python -m pytest -q --junitxml=reports/pytest.xml
+
+      - name: Upload pytest report
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: pytest-report-${{ github.run_id }}-${{ github.run_attempt }}
+          path: reports/pytest.xml
+          if-no-files-found: warn
+          retention-days: 14
