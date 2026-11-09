@@ -8,6 +8,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import yaml
+from sklearn.model_selection import GroupShuffleSplit
 
 from config import BASE_PATH, load_config
 
@@ -90,10 +91,53 @@ def row_hashes(frame, target):
     return pd.util.hash_pandas_object(frame, index=False).to_numpy()
 
 
+def training_split_indices(frame, data_cfg):
+    """Keep every copy of the same flow on one side of the validation split."""
+    groups = row_hashes(frame, data_cfg["target"])
+    splitter = GroupShuffleSplit(n_splits=1, test_size=data_cfg["test_size"],
+                                 random_state=data_cfg["seed"])
+    training, validation = next(splitter.split(frame, groups=groups))
+    if np.isin(groups[training], groups[validation]).any():
+        raise ValueError("Training and validation contain overlapping rows")
+    labels = frame[data_cfg["target"]]
+    if any(set(labels.iloc[indices].unique()) != {0, 1} for indices in (training, validation)):
+        raise ValueError("Both training and validation splits must contain both classes")
+    return training, validation
+
+
+def evaluation_snapshot(cfg, training=None):
+    policy = cfg["validation"]
+    source = policy.get("source", "external_file")
+    if source == "training_split":
+        training = training if training is not None else training_snapshot(cfg)
+        return {**training, "split": {"method": "group_shuffle_by_flow", "subset": "validation",
+                                      "test_size": cfg["data"]["test_size"],
+                                      "seed": cfg["data"]["seed"]}}
+    if source == "external_file":
+        return snapshot(policy["data_path"], policy["data_md5"])
+    raise ValueError(f"Unknown validation data source: {source}")
+
+
+def load_evaluation_frame(cfg):
+    evaluation = evaluation_snapshot(cfg)
+    frame = pd.read_csv(project_path(evaluation["path"]))
+    if "split" in evaluation:
+        _, validation = training_split_indices(frame, cfg["data"])
+        frame = frame.iloc[validation]
+    return evaluation, frame
+
+
 def check_datasets(cfg):
     training = training_snapshot(cfg)
-    policy = cfg["validation"]
-    evaluation = snapshot(policy["data_path"], policy["data_md5"])
+    evaluation = evaluation_snapshot(cfg, training)
+    if "split" in evaluation:
+        frame = pd.read_csv(project_path(training["path"]))
+        features, _ = prepare_frame(frame, cfg["data"])
+        del features
+        fit_indices, validation_indices = training_split_indices(frame, cfg["data"])
+        return {"passed": True, "training_data": training, "evaluation_data": evaluation,
+                "n_source_rows": len(frame), "n_training": len(fit_indices),
+                "n_evaluation": len(validation_indices), "overlapping_rows": 0}
     eval_frame = pd.read_csv(project_path(evaluation["path"]))
     eval_features, _ = prepare_frame(eval_frame, cfg["data"])
     evaluation_hashes = row_hashes(eval_frame, cfg["data"]["target"])

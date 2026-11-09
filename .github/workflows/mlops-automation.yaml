@@ -112,11 +112,11 @@ jobs:
           "$RUNNER_TEMP/nids-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT/bin/python" -m pip install -r requirements-automation.txt
           echo "$RUNNER_TEMP/nids-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT/bin" >> "$GITHUB_PATH"
 
-      - name: Pull pinned training and evaluation data from DVC
+      - name: Pull pinned source dataset from DVC
         shell: bash
         run: |
           dvc remote modify --local s3store endpointurl "$DVC_S3_ENDPOINT"
-          dvc pull data/processed/dataset.csv.dvc data/processed/simulation_stream
+          dvc pull data/processed/dataset.csv.dvc
 
       - name: Validate data snapshots, labels and train/eval separation
         run: python src/production/check_training_data.py --output "$PIPELINE_REPORT_DIR/data_validation.json"

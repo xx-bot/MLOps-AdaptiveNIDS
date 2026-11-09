@@ -239,8 +239,9 @@ uv pip install --python .venv/bin/python -r requirements-test.txt
 .venv/bin/python -m pytest -q --junitxml=reports/pytest.xml
 ```
 
-The suite contains 52 cases: configuration (7), encoding/inference (7), Zeek
-preprocessing (2), dataset storage (4), and validation/registry safeguards (32).
+The suite contains 59 cases: configuration (7), encoding/inference (7), Zeek
+preprocessing (2), dataset storage (4), validation/registry safeguards (32), and
+reproducible validation splits (7).
 The original 18 package-A cases are retained. Unit tests use mocks for the registry;
 model performance is measured separately after training.
 
@@ -254,7 +255,7 @@ model performance is measured separately after training.
 Before pushing the pipeline changes:
 
 1. Start the local SeaweedFS service with `docker compose up -d` and publish the
-   pinned data with `dvc push data/processed/dataset.csv.dvc data/processed/simulation_stream`.
+   pinned source dataset with `dvc push data/processed/dataset.csv.dvc`.
 2. In GitHub **Settings → Actions → Runners**, add a Linux x64 self-hosted runner on
    the machine with access to local storage. Install it outside your personal repo,
    add the custom label `adaptive-nids`, and keep `./run.sh` running during the demo.
@@ -271,8 +272,13 @@ Before pushing the pipeline changes:
    The two storage credentials are already defined in the local, Git-ignored `.env`
    used by Docker Compose. Copy their values into GitHub secrets; do not commit the file.
 
-The pipeline pulls versioned DVC data, verifies hashes and train/evaluation separation,
-trains without registration, and evaluates on the pinned batch 7 benchmark. Recall,
+The pipeline pulls the versioned `dataset.csv` from DVC and reserves a deterministic
+validation split using `train.data.test_size=0.2` and `seed=42`. Identical flows,
+including timestamps but excluding labels, stay together in one partition to prevent
+duplicate records leaking into validation. The 20% fraction applies to flow groups;
+the actual row counts are recorded in `data_validation.json`. Training and evaluation
+recreate the same split. Batch 7 is reserved for final testing and is not pulled or
+read by the automatic Staging gate. Recall,
 F1, and PR-AUC (Average Precision) must each be at least **0.95**, as agreed for package B.
 If any metric fails, the job fails and registration is skipped. It does not automatically
 retry training or tune parameters. Passing candidates enter `Staging` with alias

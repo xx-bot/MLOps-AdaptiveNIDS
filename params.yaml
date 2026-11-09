@@ -8,7 +8,7 @@ train:
     target: Label
     drop_columns: [Stime, Ltime]       # timestamps are not features
     float_columns: [dur, sbytes, dbytes, Sload, Dload, Spkts, Dpkts, smeansz, dmeansz]  # cast to float64: the MLflow signature rejects int64 for a double column and the reverse
-    test_size: 0.2
+    test_size: 0.2                     # validation fraction of flow groups (row fraction may differ)
     seed: 42
   xgb:                                 # passed straight to XGBClassifier(**xgb)
     tree_method: hist
@@ -29,8 +29,7 @@ train:
     guard_metric: f1
     max_guard_drop: 0.01
   validation:                          # absolute Staging gate, separate from champion promotion
-    data_path: data/processed/simulation_stream/batch_7.csv
-    data_md5: 2705531ab54ff9c814bee03ce97baaa3  # batch_7 entry in the DVC split directory
+    source: training_split             # deterministic group split of dataset.csv; batch 7 is final test only
     pr_auc_definition: average_precision
     # Package-B policy agreed with the project owner; NOT specified in the LK-01 PDF.
     min_metrics:

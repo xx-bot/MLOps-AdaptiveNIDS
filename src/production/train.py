@@ -15,7 +15,6 @@ import mlflow.pyfunc
 from mlflow.models import infer_signature
 from sklearn.metrics import (accuracy_score, average_precision_score, f1_score, precision_score,
                              recall_score, roc_auc_score)
-from sklearn.model_selection import train_test_split
 
 # train.py lives in src/production/, so make src/ importable too (for config.py)
 src_dir = Path(__file__).resolve().parent.parent
@@ -24,8 +23,8 @@ if str(src_dir) not in sys.path:
 
 from config import BASE_PATH, flatten, load_config, resolve_tracking_uri
 from ids_model import IDSModel
-from pipeline_utils import (fingerprint, prepare_frame, project_path, read_json,
-                            training_snapshot, write_json)
+from pipeline_utils import (evaluation_snapshot, fingerprint, prepare_frame, project_path,
+                            read_json, training_snapshot, training_split_indices, write_json)
 
 
 class Frequency_encoder:
@@ -74,15 +73,16 @@ def data_version(data_path):
 
 def train_model(cfg, manifest_path, artifacts_dir, metrics_path, overrides=(), data_report=None):
     training_data = training_snapshot(cfg)
-    evaluation_data = {"path": cfg["validation"]["data_path"], "md5": cfg["validation"]["data_md5"]}
+    evaluation_data = evaluation_snapshot(cfg, training_data)
     if data_report is not None:
         report = read_json(data_report)
         if report.get("passed") is not True or report.get("training_data") != training_data or report.get("evaluation_data") != evaluation_data:
             raise ValueError("Data validation report does not match this training/evaluation snapshot")
     df = pd.read_csv(project_path(cfg["data"]["path"]))
     X, y = prepare_frame(df, cfg["data"])
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, stratify=y, test_size=cfg["data"]["test_size"], random_state=cfg["data"]["seed"])
+    training_indices, validation_indices = training_split_indices(df, cfg["data"])
+    X_train, X_test = X.iloc[training_indices], X.iloc[validation_indices]
+    y_train, y_test = y.iloc[training_indices], y.iloc[validation_indices]
 
     fe = Frequency_encoder().fit(X_train)
     X_train_encoded = fe.transform(X_train)
@@ -106,7 +106,7 @@ def train_model(cfg, manifest_path, artifacts_dir, metrics_path, overrides=(), d
         xgb_model = xgb.XGBClassifier(**params)
         xgb_model.fit(X_train_encoded, y_train)
 
-        # 2) Evaluate on the held-out test set
+        # 2) Evaluate on the validation split; batch 7 remains the final test set.
         y_pred = xgb_model.predict(X_test_encoded)
         y_proba = xgb_model.predict_proba(X_test_encoded)[:, 1]
         metrics = {
@@ -180,7 +180,7 @@ def train_model(cfg, manifest_path, artifacts_dir, metrics_path, overrides=(), d
     # Publish only after the MLflow run has exited successfully.
     write_json(manifest_path, manifest)
     print("TRAIN SUCCESS | run_id:", manifest["run_id"], "| model_uri:", manifest["model_uri"])
-    print("Internal test-split metrics:", json.dumps(metrics))
+    print("Internal validation-split metrics:", json.dumps(metrics))
     return manifest
 
 

@@ -1,4 +1,4 @@
-"""Evaluate the exact candidate on pinned hold-out data and enforce the Staging gate."""
+"""Evaluate the exact candidate on validation data and enforce the Staging gate."""
 
 import argparse
 import json
@@ -7,14 +7,13 @@ from pathlib import Path
 
 import mlflow
 import numpy as np
-import pandas as pd
 from sklearn.metrics import (accuracy_score, average_precision_score, f1_score,
                              precision_score, recall_score, roc_auc_score)
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from config import resolve_tracking_uri
-from pipeline_utils import (fingerprint, load_pipeline_config, metric_gate, prepare_frame,
-                            project_path, read_json, snapshot, verify_candidate,
+from pipeline_utils import (fingerprint, load_evaluation_frame, load_pipeline_config,
+                            metric_gate, prepare_frame, read_json, verify_candidate,
                             verify_manifest, write_json)
 
 
@@ -23,10 +22,10 @@ def evaluate(manifest, cfg):
     policy = cfg["validation"]
     if policy["pr_auc_definition"] != "average_precision":
         raise ValueError("Only average_precision PR-AUC is supported")
-    evaluation_data = snapshot(policy["data_path"], policy["data_md5"])
+    evaluation_data, frame = load_evaluation_frame(cfg)
     if evaluation_data != manifest["evaluation_data"]:
         raise ValueError("Evaluation snapshot differs from training manifest")
-    features, labels = prepare_frame(pd.read_csv(project_path(evaluation_data["path"])), cfg["data"])
+    features, labels = prepare_frame(frame, cfg["data"])
     mlflow.set_tracking_uri(resolve_tracking_uri(cfg["mlflow"]["tracking_uri"]))
     client = mlflow.MlflowClient()
     verify_candidate(client, manifest)
